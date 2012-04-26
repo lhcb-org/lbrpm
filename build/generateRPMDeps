@@ -1,0 +1,426 @@
+#!/usr/bin/env python
+"""
+A script to list the dependencies of a project from SVN
+
+"""
+
+import logging
+import re
+import sys
+import os
+
+from LbConfiguration.Repository import getRepositories
+from LbConfiguration.Project import getProject
+from LbUtils.Script import Script
+from LbRelease import rcs
+from LbRelease.SvnTools.Project import translateProject, getProjectCmt
+
+from LbLegacy.install_project import calculateMD5
+from LbLegacy.Utils import getStatusOutput
+from LbConfiguration.Platform import isBinaryDbg, getBinaryOpt
+
+from LbUtils.CMT.Common import isCMTMessage
+from LbUtils.Temporary import TempDir
+
+import sys, os, getopt, time, fnmatch
+import re
+
+script_version = '120424'
+
+from LbConfiguration.Package import package_names, getPackage
+
+class MakeLHCbTarException(Exception): pass
+
+
+LHCBTAR = os.getenv('LHCBTAR')
+HTMLDIR = os.path.join(LHCBTAR, 'html')
+TARSRC = 'source'
+here = os.environ['LHCBRELEASES']
+os.chdir(here)
+maindir = None
+
+url = str(getRepositories(protocol='anonymous')["lbsvn"])
+lbsvn = rcs.connect(url)
+
+gaudiurl = str(getRepositories(protocol='anonymous')["gaudi"])
+gaudisvn = rcs.connect(gaudiurl)
+
+def _get_base_project(native_version):
+    NAME = native_version.split('_')[0]
+    version = native_version.split('_')[1]
+    Name = NAME.lower().capitalize()
+    if NAME == 'LCGCMT': Name = 'LCG'
+    if NAME == 'LHCBGRID' : Name = 'LHCbGrid'
+    NameSys = Name + 'Sys'
+    if Name == 'Gaudi': NameSys = Name + 'Release'
+    if Name == 'LCG' : NameSys = Name + '_Release'
+    release_area = Name + '_release_area'
+    return NAME, version, Name, NameSys, release_area
+
+
+def _get_project_dir(native_version):
+    NAME, version, Name, NameSys, release_area = _get_base_project(native_version)
+    dir = os.path.join(os.environ[release_area], NAME, native_version)
+    return dir
+
+
+def _get_runtime_deps(filename):
+    deps = dict()
+    matchexpr = re.compile("#\s*runtime_use\s+\w+")
+    for l in open(filename, "r") :
+        if matchexpr.search(l[:-1]) :
+            words = l[:-1].replace("#", "").split()
+            if len(words) < 3 :
+                deps[words[1]] = ""
+            else :
+                deps[words[1]] = words[2]
+    return deps
+
+def _get_runtime_cmtpath(projectfile):
+    file = projectfile
+    deps = _get_runtime_deps(file)
+    cmtpath = []
+    for d in deps.keys():
+        dir = _get_project_dir(deps[d])
+        cmtpath.append(dir)
+    return ':'.join(cmtpath)
+
+
+def _get_grid_version(path_list):
+    grid_version = None
+    for p in path_list :
+        if p.find("LHCBGRID") != -1 :
+            grid_version = os.path.basename(p).split("_")[1]
+            break
+    return grid_version
+
+
+def generateDependencyList(pname, pversion, tar_bin, tar_opt):
+
+    global maindir
+
+    p = getProject(pname)
+    #print "Corrected name:%s - %s" % (p.Name(), pname)
+
+    pname = p.Name()
+    
+    if os.environ.has_key('CMTPROJECTPATH'):
+        CMTPROJECTPATH = os.environ['CMTPROJECTPATH']
+    else:
+        CMTPROJECTPATH = ''
+
+# environment package
+    if CMTPROJECTPATH == '':
+        env = pname + 'Env'
+        if not os.path.isdir(env):
+            print '%s environment package does not exist - STOP ' % (env)
+            sys.exit('No environment package')
+    else:
+        env = ''
+
+        
+
+    PACK = pname.upper()
+
+    maindir = os.path.join(PACK, PACK + '_' + pversion)
+    packver = PACK + '_' + PACK + '_' + pversion
+    packSys = pname + 'Sys'
+    if pname == 'Gaudi' :
+        packSys = pname + 'Release'
+        if env == 'GaudiEnv': packSys = 'Gaudi'
+
+#
+# === if binary tar file is requested make sure that the InstallArea has been built ========
+#
+    if CMTPROJECTPATH == '':
+        if platform != '':
+            ia_dir = os.path.join(maindir, 'InstallArea')
+            if not os.path.isdir(os.path.join(ia_dir, binary)):
+                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary)))
+                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'lib')))
+                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'bin')))
+            l = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'lib'))
+            b = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'bin'))
+            if len(l) == 0 and len(b) == 0 :
+                sys.exit('no library for this binary %s ' % (binary))
+    
+    os.environ['CMTPATH'] = ''
+    if CMTPROJECTPATH == '':
+        os.chdir(os.path.join(env, pversion, 'cmt'))
+    else:
+        if PACK == "GAUDI":
+            return
+        os.chdir(os.path.join(here, maindir, 'cmt'))
+
+    os.environ['CMTPATH'] = _get_runtime_cmtpath(os.path.join(here, maindir, 'cmt', 'project.cmt'))
+
+    status, value = getStatusOutput('cmt show set_value CMTPATH')
+    if isCMTMessage(value) :
+        CMTPATH = value.split('\n')[1]
+    else:
+        CMTPATH = value
+    os.environ['CMTPATH'] = CMTPATH
+
+    if CMTPATH == '':
+        print ' CMTPATH is not set - STOP '
+        sys.exit()
+    else:
+        if PACK == 'PANORAMIX':
+            if os.path.exists(os.path.join(here, maindir, 'PanoramixSys', 'cmt')) :
+                os.chdir(os.path.join(here, maindir, 'PanoramixSys', 'cmt'))
+            else :
+                os.chdir(os.path.join(here, maindir, 'PanoramixSys', pversion, 'cmt'))
+            status, OSC_home = getStatusOutput('cmt show macro_value OSC_home')
+            status, LCG_system = getStatusOutput('cmt show macro_value LCG_system')
+            OSC_PATH = OSC_home.split(LCG_system)[0]
+            while OSC_PATH.endswith(os.sep) :
+                OSC_PATH = OSC_PATH[:-1]
+            CMTPATH = os.pathsep.join([CMTPATH, OSC_PATH])
+
+    os.putenv('CMTPATH', CMTPATH)
+    os.environ['CMTPATH'] = CMTPATH
+
+    #print 'CMTPATH = %s ' % (os.getenv('CMTPATH'))
+    os.chdir(here)
+
+#
+# ==== get the dependencies and write the dependency html file ======
+#
+# write the dependency list on dephtml
+# dependencies are given by the CMTPATH: one path per project, in the reverse order of CMTPATH,
+# in the installation order, PACK is not part of the dependencies.
+# LHCb projects (PACK=GAUDI,LHCB,DAVINCI, ...) tar files are stored on $LHCBTAR/PACK
+# LCG projects (LCGCMT, GENSER) and OpenSCientist tar files are stored on $LHCBTAR/source
+# DBASE and PARAM package dependencies are found using 'cmt show uses'
+
+    tmpdir = TempDir(prefix="mkLHCbtar")
+    
+    path_list = CMTPATH.split(':')
+
+    #print "######## %s " % path_list
+    showDeps = False
+    path_list.reverse()
+    for p in path_list:
+        if p.find(PACK) != -1: break
+        dver = os.path.basename(p)
+        if dver == 'DBASE' or dver == 'PARAM' or dver == 'TOOLS' : continue
+        dnam = dver.split('_')[0]
+        #print "####### %s %s" % (dnam, dver) 
+        if dnam == 'LCGCMT' or p.find('OpenScientist') != -1 or p.find('osc_vis') != -1 :
+            if dnam != 'LCGCMT' :
+                if p.find('OpenScientist') != -1 :
+                    dver = 'OpenScientist_' + dver
+                elif p.find('osc_vis') != -1 :
+                    dver = 'osc_vis' + '_' + dver
+            if PACK == 'LHCBGRID':
+                dver = 'LCGGrid' + '_' + pversion
+            if (PACK == 'DIRAC' or PACK == 'LHCBDIRAC' or PACK == 'GANGA') and dnam == 'LCGCMT' :
+                dver = 'LCGGrid' + '_' + _get_grid_version(path_list)
+            dbin = tar_opt
+            dtar = dver + dbin
+            #print 'dnam %s, dver %s, dbin %s, dtar %s' % (dnam, dver, dbin, dtar)
+            #print '[<A HREF=source/' + dtar + '.tar.gz>' + dtar + '</A>]\n'
+            if showDeps:
+                print "Requires: %s%s" % (dver, dbin)
+
+            if PACK == 'GANGA' and dnam == 'LCGCMT' :
+                dver = 'LCGGanga' + '_' + pversion
+                dtar = dver + dbin
+                if showDeps:
+                    print "Requires: %s%s" % (dver, dbin)
+                #print 'dnam %s, dver %s, dbin %s, dtar %s' % (dnam, dver, dbin, dtar)
+                #print '[<A HREF=source/' + dtar + '.tar.gz>' + dtar + '</A>]\n'
+        else:
+            if showDeps:
+                print "Requires: %s%s" % (dver, dbin)
+            dtar = dnam + '_' + dver + tar_bin
+            #print '[<A HREF=' + dnam + '/' + dtar + '.tar.gz>' + dtar + '</A>]\n'
+
+
+# add dependencies to DBASE and PARAM packages to dephtml
+    if os.path.exists(os.path.join(maindir, packSys, 'cmt')) :
+        os.chdir(os.path.join(maindir, packSys, 'cmt'))
+    else :
+        os.chdir(os.path.join(maindir, packSys, pversion, 'cmt'))
+    for line in os.popen('cmt show uses').readlines():
+        if line.find('DBASE') != -1 or line.find('PARAM') != -1 or line.find('TOOLS') != -1:
+            dnam = 'DBASE'
+            if line.find('PARAM') != -1 : dnam = 'PARAM'
+            if line.find('TOOLS') != -1 : dnam = 'TOOLS'
+            file = line.split('(')[0].split()
+            #print file
+            name = file[1]
+            ver = file[2]
+            hat = ''
+            if len(file) == 4: hat = file[3] + '_'
+            print "Requires: %s_%s%s" % (dnam,hat, name)
+            dver = hat + name + '_' + ver
+            dtar = dnam + '_' + dver
+            #print '[<A HREF=' + dnam + '/' + dtar + '.tar.gz>' + dtar + '</A>]\n'
+    os.chdir(here)
+
+# if GAUSS: get GENSER dependency
+    if PACK == 'GAUSS':
+        if os.path.exists(os.path.join(maindir, packSys, 'cmt')) :
+            os.chdir(os.path.join(maindir, packSys, 'cmt'))
+        else :
+            os.chdir(os.path.join(maindir, packSys, pversion, 'cmt'))
+        if os.environ.has_key('CMTPROJECTPATH'):
+            status, value = getStatusOutput('cmt show macro_value GENSERVERSION')
+            if isCMTMessage(value) :
+                GENSER_version = 'GENSER_' + value.split('\n')[1]
+            else:
+                GENSER_version = 'GENSER_' + value
+        else:
+            status, GENSER_version = getStatusOutput('cmt show macro_value GENSER_native_version')
+
+        if status != 0:
+            print 'GENSER is not used'
+        else:
+            dtar = GENSER_version + tar_opt
+            print '[<A HREF=source/' + dtar + '.tar.gz>' + dtar + '</A>]\n'
+        os.chdir(here)
+
+# if ONLINE: get DIM dependency
+    if PACK == 'ONLINE':
+        if os.path.exists(os.path.join(maindir, packSys, 'cmt')) :
+            os.chdir(os.path.join(maindir, packSys, 'cmt'))
+        else :
+            os.chdir(os.path.join(maindir, packSys, pversion, 'cmt'))
+        status, DIM_version = getStatusOutput('cmt show macro_value DIM_native_version')
+        if status != 0:
+            print 'DIM is not used'
+        else:
+            dtar = 'DIM_' + DIM_version + tar_opt
+            print('[<A HREF=source/' + dtar + '.tar.gz>' + dtar + '</A>]\n')
+        os.chdir(here)
+
+
+
+
+
+
+class getProjectDepsScript(Script):
+    """ Main scripts class for looking up dependencies.
+    It inherits from """
+
+    def defineOpts(self):
+        """ Script specific options """
+        parser = self.parser
+        parser.add_option("-r",
+                          dest = "recursive",
+                          action = "store_true",
+                          help = "Display dependencies recursively")
+        parser.add_option("-d",
+                          dest = "debug",
+                          action = "store_true",
+                          help = "Display debug output")
+
+    def main(self):
+        """ Main method for bootstrap and parsing the options.
+        It invokes the appropriate method and  """
+        self.log = logging.getLogger()
+        opts = self.options
+        args = self.args
+        if opts.debug:
+            self.log.setLevel(logging.DEBUG)
+        if len(args) < 2 :
+            self.log.error("Not enough arguments")
+            sys.exit(1)
+        else :
+            project   = args[0]
+            version   = args[1]
+            extraver  = "noarch"
+            if (len(args)) > 2:
+                extraver = args[2]
+
+            if extraver == "noarch":
+                tar_bin = ''
+                tar_opt = '_' + os.environ['CMTCONFIG']
+            else:
+                tar_bin = extraver
+                tar_opt = tar_bin
+                if isBinaryDbg(tar_opt) :
+                    tar_opt = "_" + getBinaryOpt(binary)
+            
+            if extraver == "noarch" or len(extraver) == 0:
+                sys.exit(0)
+
+            generateDependencyList(project, version, tar_bin, tar_opt)
+
+            # Now get the dependencies
+            deps = []
+            if self.options.recursive:
+                deps = self.traverseDependencies(project, version)
+            else:
+                deps = self.getDependencies(project, version)
+
+            # Now printing
+            for d in deps:
+                tmpd = d[1].replace(d[0] + "_", "")
+		if extraver == "noarch" or len(extraver) == 0:
+                    # No need to add dependency when dealing with source package
+                    #print "Requires: %s_%s" % (d[0], tmpd)
+                    pass
+		else:
+                    if not extraver.startswith("_"):
+                        extraver = "_" + extraver
+                    
+                    print "Requires: %s_%s%s" % (d[0].upper(), tmpd, extraver)
+
+            # Add dependcy to source package
+            if extraver != "noarch":
+                 print "Requires: %s_%s" % (project.upper(), version)
+		
+
+    def traverseDependencies(self, project, version, alreadyDone = []):
+        """ Recursively traverse all dependencies.
+        Dependencies are looked up from SVN using the getDependencyMethod.
+        A complete list of tuples (project, version) is returned"""
+        self.log.debug("TraverseDeps %s,%s" % (project, version))
+        self.log.debug(alreadyDone)
+        deps = self.getDependencies(project, version)
+        alreadyDone.append((project, version))
+        ndeps = deps
+        for d in deps:
+            if not d in alreadyDone:
+                tmpDeps = self.traverseDependencies(d[0], d[1], alreadyDone)
+                for td in tmpDeps:
+                    if not td in alreadyDone:
+                        alreadyDone.append(td)
+                    if not td in ndeps:
+                        ndeps.append(td)
+        return ndeps
+
+    def getDependencies(self, p, v):
+        """ Get the dependencies for a single project """
+        # Cleanup the project name and version and get the SVN URL
+        self.log.debug("getDeps %s %s" % (p, v))
+        (proj,ver)=translateProject(p,v)
+        tagpath = ""
+        if proj.upper() == "GAUDI":
+            tagpath = gaudisvn.url(proj,ver, isProject=True)
+        else:
+            tagpath=lbsvn.url(proj,ver, isProject=True)
+        self.log.debug("SVN PATH:" + tagpath)
+        # Get the project.cmt file and parse it to retrieve the dependencies
+        projcmt=getProjectCmt(tagpath).strip()
+        deps = []
+        for l in projcmt.splitlines():
+            m = re.match("\s*use\s+(\w+)\s+(\w+)", l)
+            if m != None:
+                dp = m.group(1)
+                dv = m.group(2)
+                deps.append((dp, dv))
+        return deps
+
+
+if __name__=='__main__':
+    sUsage = """%prog [-r] project version
+     -r: Recursively lists all dependencies.
+     -d: Prints debug output.
+      """
+    s = getProjectDepsScript(usage=sUsage)
+    sys.exit(s.run())
+
+

@@ -1,0 +1,138 @@
+#!/usr/bin/env python
+"""
+Command to convert a LHCb data Package in a RPM file
+"""
+
+import logging
+import os
+import re
+import subprocess
+import sys
+
+log = logging.getLogger()
+log.addHandler(logging.StreamHandler())
+log.setLevel(logging.INFO)
+
+local_directory = os.path.dirname(__file__).strip()
+os.environ['PATH'] =  os.pathsep.join([os.environ['PATH'], local_directory])
+
+
+# Util method to prepare the build area
+################################################################################
+def checkBuildAra(ba):
+
+    if not os.path.exists(ba):
+        os.makedirs(ba)
+
+    basdirs = [ 'rpmbuild', 'tmpbuild', 'tmp' ]
+    for s in basdirs:
+        tmp = os.path.join(ba, s)
+        if not os.path.exists(tmp):
+            os.makedirs(tmp)
+        
+    rpmbuild =  os.path.join(ba, 'rpmbuild')
+    sdirs = [ 'SOURCES', 'RPMS', 'BUILD', 'SRPMS' ]
+    for s in sdirs:
+        tmp = os.path.join(rpmbuild, s)
+        if not os.path.exists(tmp):
+            os.makedirs(tmp)
+
+# Checking arguments 
+################################################################################
+def usage():
+    print >> sys.stderr, "Usage: %s project version" % sys.argv[0]
+    sys.exit(2)
+
+
+from optparse import OptionParser
+parser = OptionParser()
+parser.add_option("--buildarea", dest="buildarea", action="store",
+                  help="Location where the RPM is build",
+                  default = "/tmp/buildarea")
+
+(options, args) = parser.parse_args()
+
+
+maxarg = len(args)
+if  maxarg < 2:
+    print >> sys.stderr, "Missing arguments!"
+    usage()
+
+# We allow the hat and package name to be passed separated by
+# spaces, this makes scripts invoking simpler in some cases
+project = args[0].upper()
+orig_project = args[0]
+version = args[1]
+cmtconfig = ''
+
+if len(args) > 2:
+    cmtconfig = args[2]
+
+useVersion = options.useVersion
+log.info("Creating RPM for <%s> <%s> <%s>  - use version: %s" % (project, version, cmtconfig, useVersion))
+
+
+buildarea = options.buildarea
+checkBuildAra(buildarea)
+log.info("Using build area: %s" % buildarea)
+
+
+# Checking arguments 
+################################################################################
+def usage():
+    print >> sys.stderr, "Usage: %s project package version" % sys.argv[0]
+    sys.exit(2)
+
+maxarg = len(sys.argv) -1
+if  maxarg < 3:
+    print >> sys.stderr, "Missing arguments!"
+    usage()
+
+# We allow the hat and package name to be passed separated by
+# spaces, this makes scripts invoking simpler in some cases
+project = sys.argv[1].upper()
+version = sys.argv[maxarg]
+package = "_".join(sys.argv[2:maxarg])
+
+log.info("Creating RPM for <%s> <%s> <%s>" % (project, package, version))
+
+# Parsing version
+################################################################################
+
+patch_version = 0
+
+m = re.match("v([\d]+)r([\d]+)$", version)
+if m != None:
+    maj_version = m.group(1)
+    min_version = m.group(2)
+else:
+    # Checking whetehr the version matches vXrYpZ in that case
+    m = re.match("v([\d]+)r([\d]+)p([\d]+)", version)
+    if m != None:
+        maj_version = m.group(1)
+        min_version = m.group(2)
+        patch_version = m.group(3)
+    else:
+        log.error("Version %s does not match format vXrY pr vXryPZ" % version)
+
+
+# Now preparing rpmbuild command
+################################################################################
+def addDefine(param, val):
+    return " --define '%s %s' " % (param, val)
+
+cmd = "rpmbuild -v"
+cmd += addDefine("project", project)
+cmd += addDefine("package", package)
+cmd += addDefine("lbversion", version)
+cmd += addDefine("maj_version", maj_version)
+cmd += addDefine("min_version", min_version)
+cmd += addDefine("patch_version", patch_version)
+cmd += " -bb " + os.path.join(local_directory, "LHCb_DataPackage.spectemplate")
+
+log.info("Running: %s" % cmd)
+rc = subprocess.call(cmd, shell=True)
+sys.exit(rc)
+
+
+    

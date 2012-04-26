@@ -1,0 +1,73 @@
+%define cmtconfig %{config}
+%define filename %{project}_%{project}_%{lbversion}%{cmtconfig}.tar.gz
+%define url http://lhcbproject.web.cern.ch/lhcbproject/dist/%{project}/%{filename}
+%define cmtconfig_rpm %( echo %{cmtconfig} | tr '-' '_' )
+%define allreqs %( generateRPMDeps %{orig_project} %{lbversion} %{cmtconfig_rpm})
+%define rpmversion %{lbversion}%{cmtconfig_rpm}
+
+
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
+
+Name: %{project}_%{rpmversion}
+Version:1.0.0
+Release: 1
+Vendor: LHCb
+Summary: %{project}
+License: GPL
+Group: LHCb
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{name}-buildroot
+BuildArch: %{packarch}
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+%{allreqs}
+
+%description
+%{project}
+
+%prep
+echo "Building <%{project}><%{lbversion}><%{cmtconfig}>"
+
+%build
+
+%install
+
+cd %_topdir/SOURCES
+wget -nc %url
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+gzip -dc %_topdir/SOURCES/%{filename} | tar -xvvf -
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+%post
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+/opt/lhcb/lhcb/%{project}/%{project}_%{lbversion}/
+
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+

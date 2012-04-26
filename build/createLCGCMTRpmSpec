@@ -1,0 +1,316 @@
+#!/usr/bin/env python
+
+import os
+import sys
+import tarfile
+from string import Template
+import shutil
+
+# Directory configuration
+###############################################################################
+
+lcgcmt_project = "LCGCMT"
+lcgcmt_version = sys.argv[1]
+lcgcmt_cmtconfig = sys.argv[2]
+
+topdir = "/scratch/z5/rpmbuild"
+tmpdir = "/scratch/z5/tmpbuild"
+rpmtmp = "/scratch/z5/tmp"
+
+appWihSubdir = ['Grid']
+appWithoutConfig = ['LCGCMT' ]
+
+buildroot = os.path.join(tmpdir, "LCGCMT-%s-%s-buildroot" % (lcgcmt_version, lcgcmt_cmtconfig))
+if not os.path.exists(buildroot):
+    os.makedirs(buildroot)
+    
+externaldir = os.path.join(buildroot, "opt", "lhcb", "lcg", "external")
+
+# Class representing a RPM
+###############################################################################
+class Rpm(object):
+
+    def __init__(self, name, version, config, hat = None):
+        self.name = name
+        self.version = version
+        self.config = config
+        self.hat = hat
+        self.files = []
+
+    def getRPMName(self):
+        pre = self.name
+        if self.hat != None:
+            pre = self.hat + "_" + self.name
+
+        post = (self.version + "_" + self.config).replace("-", "_")
+        return pre + "_" + post
+
+    def getRPMVersion(self):
+        return "1.0.0"
+
+    def __str__(self):
+        str = "RPM: %s-%s\n" % (self.getRPMName(), self.getRPMVersion())
+        for f in self.files:
+            str+= "     %s\n" % f
+        return str
+
+
+# Gathering arguments
+###############################################################################
+
+#print "Preparing RPM for LCGCMT %s %s" % (lcgcmt_version, lcgcmt_cmtconfig)
+filename = "%s_%s_%s.tar.gz" % (lcgcmt_project, lcgcmt_version, lcgcmt_cmtconfig)
+url = "http://lhcbproject.web.cern.ch/lhcbproject/dist/source/%s" % filename
+full_filename = os.path.join(topdir, "SOURCES", filename)
+
+# Downloading the tarball if necessary
+if not os.path.exists(full_filename):
+    print >> sys.stderr, "## retrieving %s" % url
+    import urllib
+    urllib.urlretrieve (url, full_filename)
+else:
+    print >> sys.stderr, "## tarball %s found not need to download" % full_filename
+
+
+# Extracting the archive
+# TODO: We really shoudl do this based on the tar metainfo....
+lhcbdir = os.path.join(buildroot, "opt", "lhcb", "lcg")
+if not os.path.exists(lhcbdir):
+    print >> sys.stderr, "## Extracting tarball" 
+    os.makedirs(lhcbdir)
+    t = tarfile.open(full_filename, "r:gz")
+    t.extractall(path=lhcbdir)
+else:
+    print >> sys.stderr, "## tarball already extracted in %s" % lhcbdir
+    
+# Exception to the name of the common package
+###############################################################################
+common_exceptions = {}
+common_exceptions['gcc'] = None # This means we'll use the directory name...
+
+COMMON = "common"
+def getCommonPackageName(app, dirname):
+    name = COMMON
+    try:
+        name = common_exceptions[app]
+        if name == None:
+            name = dirname
+    except:
+        pass
+    return name
+
+
+# Util method to build RPM object
+###############################################################################
+def buildRpmInfo(buildroot, directory, cmtconfig):
+    """ Builds the Rpm object, expecting the subdir structure:
+    application/version/cmtconfig """
+    retrpms = []
+    
+
+    app = os.path.basename(directory)
+    tmpd = os.listdir(directory)
+
+    # There should be ONLY ONE subdir, named as the version
+    if len(tmpd) != 1:
+        raise Exception("Error with %s" % app)    
+    version = tmpd[0]
+
+    # Dealing with the cases where there is no subdirectory below
+    if app in appWithoutConfig:
+        rpm = Rpm(app, version, COMMON)
+        for d in os.listdir(os.path.join(directory, version)):
+            dpath = os.path.join(directory, version, d)
+            isdir = os.path.isdir(dpath) and not os.path.islink(dpath)
+            # Checking the name of the common rpm
+            cname = getCommonPackageName(app, d)
+            if cname != COMMON:
+                rpm.config = cname            
+            if isdir:
+                rpm.files.append(os.path.join(dpath, "").replace(buildroot, ""))
+            else:
+                rpm.files.append(dpath.replace(buildroot, ""))
+        return [ rpm ]
+
+    # There can be several directories, the ones not called the same as the
+    # cmtconfig the others are groups in a "common" rpm
+    cmtconfigRpm = Rpm(app, version, cmtconfig)
+    commonRpm = Rpm(app, version, COMMON)
+    needCommonRpm = False
+    needCmtconfigRpm = False
+    for d in os.listdir(os.path.join(directory, version)):
+        dpath = os.path.join(directory, version, d)
+        isdir = os.path.isdir(dpath) and not os.path.islink(dpath)
+        if d == cmtconfig:
+            needCmtconfigRpm = True
+            target = cmtconfigRpm
+        else:
+            needCommonRpm = True
+            cname = getCommonPackageName(app, d)
+            if cname != COMMON:
+                commonRpm.config = cname
+            target = commonRpm
+            
+        if isdir:
+            target.files.append(os.path.join(dpath, "").replace(buildroot, ""))
+        else:
+            target.files.append(dpath.replace(buildroot, ""))
+
+    if needCommonRpm:
+        retrpms.append(commonRpm)
+
+    if needCmtconfigRpm:
+        retrpms.append(cmtconfigRpm)
+
+    return retrpms
+        
+
+
+
+
+# Iterating through directories to list RPMs to create
+###############################################################################
+allapps = []
+for app in os.listdir(externaldir):
+    if not app in appWihSubdir:
+        allapps += buildRpmInfo(buildroot, os.path.join(externaldir, app), lcgcmt_cmtconfig)
+    else:
+        hat = app
+        tmplist = []
+        # Building the RPMS as normal
+        for subapp in os.listdir(os.path.join(externaldir, hat)):
+            tmplist += buildRpmInfo(buildroot, os.path.join(externaldir, hat, subapp), lcgcmt_cmtconfig)
+
+        # Add the hat
+        for r in tmplist:
+            r.hat = hat
+            allapps.append(r)
+
+for r in allapps:
+    print >> sys.stderr, r
+
+
+for r in allapps:
+    if len(r.files) == 0:
+        print  >> sys.stderr, "ERROR with: %s" % r.name
+        exit(1)
+
+
+
+rpm_header = Template("""
+%define project LCGCMT
+%define lbversion $rpmver
+%define cmtconfig $rpmconfig
+
+%define filename %{project}_%{lbversion}_%{cmtconfig}.tar.gz
+%define url http://lhcbproject.web.cern.ch/lhcbproject/dist/source/%{filename}
+%define cmtconfig_rpm %( echo %{cmtconfig} | tr '-' '_' )
+%define rpmversion %{lbversion}_%{cmtconfig_rpm}
+
+%define _topdir $topdir
+%define tmpdir $tmpdir
+%define _tmppath $rpmtmp
+%define debug_package %{nil}
+
+Name: %{project}_%{rpmversion}
+Version: 1.0.0
+Release: 1
+Vendor: LHCb
+Summary: %{project}
+License: GPL
+Group: LCG
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{project}-%{lbversion}-%{cmtconfig}-buildroot
+BuildArch: noarch
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+
+""").substitute(rpmver=lcgcmt_version, rpmconfig=lcgcmt_cmtconfig, \
+                topdir=topdir, tmpdir=tmpdir, rpmtmp=rpmtmp)
+
+rpm_requires = ""
+for r in allapps:
+    rpm_requires += "Requires: %s\n" % (r.getRPMName())
+
+rpm_packages = ""
+for r in allapps:
+    rpm_packages += Template("""
+%package -n $n
+Version:$v
+Group:LCG
+Summary: %s
+AutoReqProv: no
+""").substitute(n=r.getRPMName(), v=r.getRPMVersion())
+
+
+rpm_desc = """
+%description
+%{project} %{lbversion}
+"""
+
+for r in allapps:
+    rpm_desc += """
+%%description -n  %s
+%s %s
+""" % (r.getRPMName(), r.getRPMName(), r.getRPMVersion())
+
+
+rpm_common = """
+%prep
+
+%build
+
+%install
+
+#cd %_topdir/SOURCES
+#wget -nc %url
+#if [ $? -ne 0 ]; then
+#  exit $?
+#fi
+
+#[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+#/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lcg
+#if [ $? -ne 0 ]; then
+#  exit $?
+#fi
+
+#cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
+#gzip -dc %_topdir/SOURCES/%{filename} | tar -xvvf -
+#if [ $? -ne 0 ]; then
+#  exit $?
+#fi
+
+%post
+
+%postun
+
+%clean
+
+%files
+"""
+
+rpm_files = ""
+for r in allapps:
+    rpm_files += "\n%%files -n  %s\n" % (r.getRPMName())
+    rpm_files += "%defattr(-,root,root)\n" 
+    for f in r.files:
+        rpm_files += "%s\n" % f
+    
+
+rpm_trailer = """
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+"""
+
+
+
+rpm_global = rpm_header + rpm_requires + rpm_packages \
+             + rpm_desc + rpm_common + rpm_files + rpm_trailer
+
+print rpm_global

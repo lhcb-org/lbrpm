@@ -1,0 +1,265 @@
+\documentclass{lhcbnote}
+
+\title{Packaging of LHCb Software using RPM}
+\author{Benjamin Couturier{\address[BGADD]{CERN,Switzerland}},}
+
+\doctyp{Internal Note}
+\dociss{1}
+\docrev{0}
+\docref{LHCb-42-2012}
+\doccre{April 25, 2012}
+\docmod{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Review of a prototype of LHCb Software packaging and distribution system based on RPM and YUM.
+\end{abstract}
+
+\begin{status}
+\entry{Draft}{1}{April 25, 2012}{First version.}
+\end{status}
+
+\tableofcontents
+
+%\listoffigures
+%\listoftables
+
+\pagebreak
+
+\section{Introduction}
+The LHCb Software is packaged and distributed using proprietary tools maintained by the LHCb Core Software Team. While this approach allows for a high level of customization of the tools to the experiment's use cases some features are however missing and require a sizable development effort (e.g. package removal, package check). The goal of this note is to review the current system (including the use cases for LHCb software deployment) as well another possible solutions to implement requested features.
+
+\section{LHCB Software Installation a.k.a Install project}
+
+\subsection{Design}
+
+The installation at all sites, as well as the installation of software needed by some jobs is performed by one Python script (install\_project.py).
+This script puts very low requirements on the system: only python 2.4 is needed to bootstrap the installation. The rest of the required software is downloaded via HTTP. 
+The installation is done in a part of the system controlled by a normal user (the script does NOT require root access).
+The projects are packaged as compressed tar files, prepared when releasing the applications, which are downloaded/extracted by install\_project. 
+Check-sum of the downloaded packages has been implemented within the script.
+
+\subsection{System requirements}
+\begin{itemize}
+\item Python (any version posterior to  2.4)
+\item Open outgoing network connection to the LHCb release area 
+\end{itemize}
+
+
+\subsection{Advantages}
+This custom approach leads to many advantages for LHCb:
+\begin{itemize}
+\item Simple installation procedure
+\item Behaviour customized to LHCb code structure (i.e knowledge of Data packages and project differences)
+\item Possibility to implement custom hooks for specific packages (e.g. check of SQLDDDB presence)
+\item Implementation of ``cascading'' software areas where a job can use c red only common install, and complement it with software installed in its own writeable area.
+\end{itemize}
+
+\subsection{Drawbacks}
+\begin{itemize}
+\item No feature to check whether a package is installed correctly
+\item Difficult to check the dependencies of installed software
+\item Lack of tools to manage the area, perform cleanup and remove unused projects.
+\item ``overlapping'' LCGCMT packages (could be fixed within the current framework) 
+\item Need to repackage LCGCMT software to fit it into the framework.
+\item complex script (~2800 lines), difficult to maintain and to test
+\item Need to release LbScripts to be able to build/deploy new packages/projects
+\item Missing functionality to install package versions with patterns like vXr*
+\end{itemize}
+
+\pagebreak
+
+\section{LHCb Software repository}
+
+Any improvement to the software distribution tools, or a replacement by another system needs to keep compatibility with the current system: various tools rely on the current structure (e.g. SetupProject). For all modifications to the repository structure, or release script behaviour change, a migration plan must be put in place to allow for an easy transition at all LHCb sites.
+
+\subsection{Use cases}
+
+\subsubsection{Installation on CVMFS Head Node}
+\textbf{System:} Scientific Linux\\
+Performed by the LHCb deployment team who installs the software propagated via CVMFS. This installation area needs to be maintained and unused projects removed from the area.
+
+\subsubsection{CERN AFS}
+\textbf{System:} Scientific Linux\\
+At the moment, this is the place where the software is built by the LHCb deployment team. This area is not installed from standard packages.
+
+\subsubsection{Installation on physicist/developer machine}
+\textbf{System}: Unknown\\
+Manually performed by the user of the machine.
+
+\subsubsection{Installation of shared area at LHCb site}
+\textbf{System:} Scientific Linux\\
+Performed by the jobs launched via DIRAC.
+
+\subsubsection{Grid job installing specific software}
+\textbf{System:} Scientific Linux\\
+Performed by processing jobs that need software not available in the common area (CVMFS or Site local area)
+
+\subsection{Repository Structure}
+
+The LHCb Software Install Area can be located anywhere on disk, its location is set by the ``MYSITEROOT'' environment variable. It features the following directories:
+
+\begin{itemize}
+\item \textbf{lhcb:} directory containing LHCb software
+\item \textbf{lcg:} directory containing LCG software
+\item \textbf{contrib:} directory containing external but non LCG software (e.g. CMT, OpenScientist...)
+\item \textbf{LbLogin.sh, LbLogin.csh:} Links to the production version of the environment scripts
+\item \textbf{tmp:} A temporary directory used by the install scripts
+\item \textbf{html:} A directory containing local copies of the HTML dependency files used by install\_project
+\item \textbf{targz:} directory containing downloaded compressed tar files before installation
+\item \textbf{etc:} A directory containing configuration files
+\item \textbf{log:} for logs...
+\end{itemize}
+
+When using chained areas, a trick is also used for jobs to have their local versions of some data packages (and not have to reinstall the DBASE or PARAM projects), in this case a directory called \textbf{EXTRAPACKAGES} is created and the job specific data packages are copied to that directory.
+
+
+\section{Software management using RPM and yum }
+
+\subsection{Introduction}
+
+As software package management on Scientific Linux CERN (SLC, the main deployment platform for LHCb tools) is done using RPM (the RPM Package Manager c.f. http://www.rpm.org), this tool is the first natural candidate for install\_project replacement.
+
+It is interesting to note that install\_project performs several functions:
+\begin{itemize}
+\item local package manager: it installs the packages downloaded.
+\item it also connects to the Central LHCb software repository and downloads required packages and dependencies. 
+\end{itemize}
+On the other hand RPM only deals with the local package management.
+Other tools are available to manage the remote repositories and in a first approach, it was decided in a first phase to investigate yum (the yellowdog updater, modified, c.f. http://yum.baseurl.org) the default on user managed SLC nodes.
+
+\subsection{RPM/YUM demonstrator}
+
+In order to investigate the use of RPM and YUM, a prototype of the installation bootstrap (called lb-install) was written. The goal was to have enough functionality to perform realistic tests covering the aforementioned use cases.
+
+This implied the (re) packaging of some LHCb project/versions as RPM packages. The approach taken was to repackage the existing compressed tar files produced by the standard release method. In the long term, the release tools would have to be modified to produce RPM files directly but the current approach allows for validation of the new model without affecting the current infrastructure. In the context of the Cmake build project, this procedure should be reviewed.
+
+Furthermore, LCGCMT 62b was also repackaged in order to perform the tests. PH-SFT would be willing to provide LHCb directly with RPM files in the future, we however need to agree on the RPMs configuration.
+
+\subsubsection{RPM Technical choices}
+
+When building RPMs, several parameters have to be set:
+\begin{itemize}
+\item The name of the RPM package
+\item The version / release number
+\item The architecture
+\item The requirements for the package
+\end{itemize}
+
+Those choices influence the way RPM/YUM deal with the package, the way the automatic updates work.
+Different choices were made form standard projects and data packages.
+
+\subsubsection{Physics projects}
+\textbf{RPM Name:} Project name\_version\_cmtconfig\\
+\textbf{RPM Version:} 1.0.0-0 \\
+\textbf{RPM Arch:} noarch \\
+
+These choices were made because project files do not conflict or overlap. They are located in different directories and the decision of changing the version of Brunel, for example, is not a matter of simple system updates, but a conscious decision to change the software stack used for processing LHCb data. Furthermore, in the current system, a project always depends on a specific version of another project (this is not the case for data packages), so adding the version/config in the name is not a problem to establish the dependency between packages and makes the search of packages easier. Yum update/check-update also tends to propose the upgrade to the ``latest'' version of a RPM, which in this case does not make sense. 
+
+The version field defaults to 1.0.0-0, but can still be changed to perform new releases of a package (e.g. if the previous version was corrupted).
+
+In a first approach, the architecture field was set to ``noarch'' in order to make the repackaging of all tarballs easier. This choice to be reviewed in order to guide the installation on machines. However, the CMTCONFIG contains information about the architecture, but also about compilation options which do not fit in the RPM ``architecture'' field anyway.
+
+\subsubsection{Technical projects}
+\textbf{RPM Name:} Project name\\
+\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ \\
+\textbf{RPM Arch:} noarch \\
+
+These projects are LBSCRIPTS, COMPAT, CMT... For all those projects, the goal is to run with the latest version available, hence the choice of proper usage of the RPM Version, to make sure we can use yum to recommend updates.
+
+\subsubsection{Data Packages}
+\textbf{RPM Name:} (DBASE|PARAM)\_[hat\_]Package name\\
+\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ \\
+\textbf{RPM Arch:} noarch \\
+
+For data packages, the latest version is normally needed or the latest release for a major version. In the later case (which is a functionality now requested for install\_project), we could use the Requirement specifications to have projects specify which major version of a data package they need.
+  
+\subsubsection{Use of RPM as a user package management system}
+
+RPM is normally used to manage software for a complete system, with a central DB that requires root privileges for updates. Standard RPM files contain the FULL path of files they contain. For both those reasons specific options have to be used when deploying RPM in a LHCb install area.  
+
+\begin{itemize}
+\item \textbf{\textrm{-}\textrm{-}dbpath} (set to \$MYSITEROOT/var/lib/rpm as required by yum) to specify the location of the RPM database
+\item \textbf{\textrm{-}\textrm{-}prefix} (set to \$MYSITEROOT) allows to relocate the files in the RPM package, with a root corresponding to the siteroot.
+\end{itemize}
+
+In order for the produced RPM packages to be installable as user packages, several constraints are imposed on the RPMS packages, which means that the package specification file (a.k.a specfile) has to have specific commands.
+
+\begin{itemize}
+\item The have to be \textbf{relocatable}: for that purpose, a \textbf{prefix} has to be set in the specfile. The prototype default is to put all the files in /opt/lhcb and define this value as prefix. This also means that all RPM files can also be installed on a system without relocating them, they will just install, as if the MYSITEROOT was /opt/lhcb...
+\item RPM has an automated way to look-up dependencies while building the RPM. We need to deactivate this functionality (using the command \textbf{AutoReqProv: No}) as it would introduce dependencies to the system, whereas the LHCb RPM database is empty at creation time. It would be possible to create fake RPMs that check for system capabilities and Provide them in the LHCb database, but this is not a priority as such checks are not performed for the moment, and they anyway might need to be overridden for shared areas.
+\end{itemize}
+
+ There is therefore the need for a tool that can generate the list of dependencies base on the source code and on CMT. A primitive version of this tool has been written for the prototype, using the logic from \textbf{mkLHCbTar}, but with modifications:
+\begin{itemize}
+\item mkLHCbTar recursively lists all dependencies of a project down to LCGCMT. This is not needed for the RPMs as yum does the recursion on the dependency graph. Only the direct dependencies should be specified in the RPM
+\item install\_project adds an implicit dependency on the source package.RPM does not know about that so an explicit dependency is added between a binary package and the source package (which depends on nothing). The source package is in any case needed to run the CMT commands.
+\end{itemize}
+
+
+\subsubsection{Use of YUM to manage the RPM repository}
+
+
+YUM is used on the server side to create the repository metadata. For the prototype all RPM files are in the same repository, but they probably should be split (between, LCG, Projects and Data packages) for easier management. The \textbf{createrepo} command is used to generate the metadata, and the directory is exposed via HTTP.
+
+On the client side, yum is also used to check for available packages, but it cannot be used as for a normal system as:
+\begin{itemize}
+\item It checks that user is root before running install commands. This can be faked using tools like fakeroot but this is rather cumbersome.
+\item It requires the use of the \textbf{installroot} configuration parameter in the configuration file. This forces the RPM database to be in \$MYSITEROOT/var/lib/rpm, which is not an issue, but in this case it also uses the  \textbf{\textrm{-}\textrm{-}root} command to RPM. As from version 5.8, root invokes \textbf{chroot} when that option is used, which can ONLY be run by root.
+\item Yum does NOT allow to pass the \textbf{\textrm{-}\textrm{-}prefix} option to RPM.
+\end{itemize}
+
+To work round those issues, it was decided to do all repository queries using YUM with our specific configuration file (\$MYSITEROOT/etc/yum.conf), but to perform the RPM installation command ourselves. YUM is used in the following way:
+
+\begin{itemize}
+\item \textbf{yum list} is used to list all available packages 
+\item \textbf{yumdownloader \textrm{-}\textrm{-}urls \textrm{-}\textrm{-}resolve} is used to list all RPMs needed when installing a package (it lists all dependencies). We perform the download ourselves, rpm -K is used to verify the consistency of the downloaded packages. Yum downloader is a tool part of the yum-utils package which may not be present even if yum is, we therefore download it if needed.
+\item \textbf{yum check\textrm{-}update} is used to list the packages that need update.
+\end{itemize}
+
+This situation is not ideal, as we need to parse the output of yum and yumdownloader.This may prove fragile as we depend of the evolution of the YUM tool. Several solutions could be used to remedy to this problem:
+\begin{itemize}
+\item Write interfaces won to of the YUM python libraries (yum is a python tool itself).
+\item Write our own dependency management system altogether (with out own metadata DB, or using the yum one).
+\end{itemize}
+
+
+\subsection{Advantages}
+
+The prototype put in place has the following positive points:
+
+\begin{itemize}
+\item Installation transactions (rollback on installation problems)
+\item Easy check of the package itself (already in install project) but also verification of the installed files.
+\item Easy dependency assessment
+\item Easy removal of a package and all its file (and validation by the dependency DB whether it can removed...)
+\item Possibility to create Virtual packages that provide installation templates
+\item Possibility to define metapackage that list all the required software for a given environment that depends on the required applications. Installing it installs ALL application/versions in one one. This is an easy way to distribute configurations.
+\end{itemize}
+
+\subsection{Drawbacks}
+
+The following issues have been found while developing and using the prototype:
+
+\begin{itemize}
+\item Adds RPM and Yum as prerequisite to the installation of LHCb software. They are however available on CERN Linux, and installable as well as on most other Linux distributions.
+\item RPM/YUM normally are run by root user. To run as a standard user, we need to put in place some ``tricks'' and to re-write some functionality already implemented in yum... Those tricks may prove fragile so we need testing on all platforms involved.
+\end{itemize}
+
+\section{Conclusion}
+
+The prototype using RPM/YUM showed that managing the LHCb packages with RPM and YUM is possible, even if the tools have to tricked into performing the correct functionality. This leads to some concern over the future evolution of those tools: we need to investigate whether future versions do not change the functionality in a way that prevents LHCb from using them.
+
+On the positive side, in very few days (\~ one week) it was possible to get a basic prototype running (including the preparation of RPM from compressed tars). The new setup also provides functionality that is not implemented with install\_project (e.g. installation verification, repository dependency analysis needed to be able to perform regular cleanup).
+
+This is however only a first step and much is left to be done, especially concerning the production of RPM files, the generation of dependencies for a given project, all issues strongly linked with the the build system for which are investigations are going on to see whether the tools currently used (CMT) could be replaced by Cmake. We have to see how the tools fit together and how the whole software release chain would be impacted.
+
+\end{document}
+
+
+% LocalWords:  LHCb mkLHCbTar RPMs metadata createrepo fakeroot installroot
+% LocalWords:  chroot yumdownloader urls downloader utils writeable config
+% LocalWords:  vXrYpZ COMPAT dbpath siteroot specfile AutoReqProv metapackage

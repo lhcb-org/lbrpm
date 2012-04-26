@@ -1,0 +1,7 @@
+#!/bin/sh
+
+for lf in `find /afs/cern.ch/lhcb/distribution/html -name 'DBASE*html' `; do 
+	f=`basename $lf`; 
+	p2=`echo $f | sed -e 's/\.html//' | sed -e 's/DBASE_//' | tr '_' ' '`; 
+	echo createDataPackageRpm DBASE $p2; 
+done
