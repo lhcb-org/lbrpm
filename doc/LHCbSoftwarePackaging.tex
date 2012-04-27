@@ -5,7 +5,7 @@
 
 \doctyp{Internal Note}
 \dociss{1}
-\docrev{0}
+\docrev{1}
 \docref{LHCb-42-2012}
 \doccre{April 25, 2012}
 \docmod{\today}
@@ -20,6 +20,7 @@ Review of a prototype of LHCb Software packaging and distribution system based o
 
 \begin{status}
 \entry{Draft}{1}{April 25, 2012}{First version.}
+\entry{Draft}{1}{April 27, 2012}{Integration of comments from LHCb Core Software Team.}
 \end{status}
 
 \tableofcontents
@@ -44,7 +45,7 @@ Check-sum of the downloaded packages has been implemented within the script.
 
 \subsection{System requirements}
 \begin{itemize}
-\item Python (any version posterior to  2.4)
+\item Python (any version from 2.4)
 \item Open outgoing network connection to the LHCb release area 
 \end{itemize}
 
@@ -55,7 +56,7 @@ This custom approach leads to many advantages for LHCb:
 \item Simple installation procedure
 \item Behaviour customized to LHCb code structure (i.e knowledge of Data packages and project differences)
 \item Possibility to implement custom hooks for specific packages (e.g. check of SQLDDDB presence)
-\item Implementation of ``cascading'' software areas where a job can use c red only common install, and complement it with software installed in its own writeable area.
+\item Implementation of ``cascading'' software areas where a job can use a read only common install, and complement it with software installed in its own writeable area.
 \end{itemize}
 
 \subsection{Drawbacks}
@@ -79,24 +80,41 @@ Any improvement to the software distribution tools, or a replacement by another 
 \subsection{Use cases}
 
 \subsubsection{Installation on CVMFS Head Node}
-\textbf{System:} Scientific Linux\\
+\textbf{System:} Scientific Linux
+
 Performed by the LHCb deployment team who installs the software propagated via CVMFS. This installation area needs to be maintained and unused projects removed from the area.
 
 \subsubsection{CERN AFS}
-\textbf{System:} Scientific Linux\\
+\textbf{System:} Scientific Linux
+
 At the moment, this is the place where the software is built by the LHCb deployment team. This area is not installed from standard packages.
 
 \subsubsection{Installation on physicist/developer machine}
-\textbf{System}: Unknown\\
+\textbf{System}: Unknown
+
 Manually performed by the user of the machine.
 
 \subsubsection{Installation of shared area at LHCb site}
-\textbf{System:} Scientific Linux\\
+\textbf{System:} Scientific Linux
+
 Performed by the jobs launched via DIRAC.
 
 \subsubsection{Grid job installing specific software}
-\textbf{System:} Scientific Linux\\
+\textbf{System:} Scientific Linux
+
 Performed by processing jobs that need software not available in the common area (CVMFS or Site local area)
+
+\subsubsection{Installation on ONLINE Cluster}
+\textbf{System:} Scientific Linux
+
+Performed by a CRON job that runs install\_project for all projects/version listed in the file \$LHCBTAR/software\_online.txt (located on AFS). The job installs the software on a filesystem which is shared by all nodes in the online cluster.
+
+\subsubsection{Installation on CERNVM}
+\textbf{System:} Scientific Linux
+
+Virtual machines running CERNVM should get the latest version of the software directly from there. If software that is not on CVMFS is needed, then the use case is the same as for grid jobs. At the moment this specific install is performed by install\_project, but we could envisage a separate script that performs this installation.
+
+
 
 \subsection{Repository Structure}
 
@@ -153,9 +171,11 @@ Those choices influence the way RPM/YUM deal with the package, the way the autom
 Different choices were made form standard projects and data packages.
 
 \subsubsection{Physics projects}
-\textbf{RPM Name:} Project name\_version\_cmtconfig\\
-\textbf{RPM Version:} 1.0.0-0 \\
-\textbf{RPM Arch:} noarch \\
+\textbf{RPM Name:} Project name\_version\_cmtconfig
+
+\textbf{RPM Version:} 1.0.0-0 
+
+\textbf{RPM Arch:} noarch 
 
 These choices were made because project files do not conflict or overlap. They are located in different directories and the decision of changing the version of Brunel, for example, is not a matter of simple system updates, but a conscious decision to change the software stack used for processing LHCb data. Furthermore, in the current system, a project always depends on a specific version of another project (this is not the case for data packages), so adding the version/config in the name is not a problem to establish the dependency between packages and makes the search of packages easier. Yum update/check-update also tends to propose the upgrade to the ``latest'' version of a RPM, which in this case does not make sense. 
 
@@ -164,16 +184,22 @@ The version field defaults to 1.0.0-0, but can still be changed to perform new r
 In a first approach, the architecture field was set to ``noarch'' in order to make the repackaging of all tarballs easier. This choice to be reviewed in order to guide the installation on machines. However, the CMTCONFIG contains information about the architecture, but also about compilation options which do not fit in the RPM ``architecture'' field anyway.
 
 \subsubsection{Technical projects}
-\textbf{RPM Name:} Project name\\
-\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ \\
-\textbf{RPM Arch:} noarch \\
+\textbf{RPM Name:} Project name
+
+\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ 
+
+\textbf{RPM Arch:} noarch 
+
 
 These projects are LBSCRIPTS, COMPAT, CMT... For all those projects, the goal is to run with the latest version available, hence the choice of proper usage of the RPM Version, to make sure we can use yum to recommend updates.
 
 \subsubsection{Data Packages}
-\textbf{RPM Name:} (DBASE|PARAM)\_[hat\_]Package name\\
-\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ \\
-\textbf{RPM Arch:} noarch \\
+\textbf{RPM Name:} (DBASE|PARAM)\_[hat\_]Package name
+
+\textbf{RPM Version:} X.Y.Z-0 from vXrYpZ 
+
+\textbf{RPM Arch:} noarch 
+
 
 For data packages, the latest version is normally needed or the latest release for a major version. In the later case (which is a functionality now requested for install\_project), we could use the Requirement specifications to have projects specify which major version of a data package they need.
   
@@ -222,7 +248,7 @@ To work round those issues, it was decided to do all repository queries using YU
 
 This situation is not ideal, as we need to parse the output of yum and yumdownloader.This may prove fragile as we depend of the evolution of the YUM tool. Several solutions could be used to remedy to this problem:
 \begin{itemize}
-\item Write interfaces won to of the YUM python libraries (yum is a python tool itself).
+\item Write interfaces on top of the YUM python libraries (yum is a python tool itself).
 \item Write our own dependency management system altogether (with out own metadata DB, or using the yum one).
 \end{itemize}
 
@@ -237,7 +263,7 @@ The prototype put in place has the following positive points:
 \item Easy dependency assessment
 \item Easy removal of a package and all its file (and validation by the dependency DB whether it can removed...)
 \item Possibility to create Virtual packages that provide installation templates
-\item Possibility to define metapackage that list all the required software for a given environment that depends on the required applications. Installing it installs ALL application/versions in one one. This is an easy way to distribute configurations.
+\item Possibility to define metapackage that list all the required software for a given environment that depends on the required applications. Installing it installs ALL application/versions in one. This is an easy way to distribute configurations.
 \end{itemize}
 
 \subsection{Drawbacks}
@@ -245,7 +271,7 @@ The prototype put in place has the following positive points:
 The following issues have been found while developing and using the prototype:
 
 \begin{itemize}
-\item Adds RPM and Yum as prerequisite to the installation of LHCb software. They are however available on CERN Linux, and installable as well as on most other Linux distributions.
+\item Adds RPM and Yum as prerequisite to the installation of LHCb software. They are however available on CERN Linux, and installable as well on most other Linux distributions.
 \item RPM/YUM normally are run by root user. To run as a standard user, we need to put in place some ``tricks'' and to re-write some functionality already implemented in yum... Those tricks may prove fragile so we need testing on all platforms involved.
 \end{itemize}
 
@@ -253,7 +279,7 @@ The following issues have been found while developing and using the prototype:
 
 The prototype using RPM/YUM showed that managing the LHCb packages with RPM and YUM is possible, even if the tools have to tricked into performing the correct functionality. This leads to some concern over the future evolution of those tools: we need to investigate whether future versions do not change the functionality in a way that prevents LHCb from using them.
 
-On the positive side, in very few days (\~ one week) it was possible to get a basic prototype running (including the preparation of RPM from compressed tars). The new setup also provides functionality that is not implemented with install\_project (e.g. installation verification, repository dependency analysis needed to be able to perform regular cleanup).
+On the positive side, in very few days (about a week) it was possible to get a basic prototype running (including the preparation of RPM from compressed tars). The new setup also provides functionality that is not implemented with install\_project (e.g. installation verification, repository dependency analysis needed to be able to perform regular cleanup).
 
 This is however only a first step and much is left to be done, especially concerning the production of RPM files, the generation of dependencies for a given project, all issues strongly linked with the the build system for which are investigations are going on to see whether the tools currently used (CMT) could be replaced by Cmake. We have to see how the tools fit together and how the whole software release chain would be impacted.
 
