@@ -1,0 +1,73 @@
+
+%define fullname %{project}_%{package}_%{lbversion}.tar.gz
+%define filename %{project}_%{package}_%{lbversion}.tar.gz
+%define url http://lhcbproject.web.cern.ch/lhcbproject/dist/%{project}/%{filename}
+# This is to deal with the case when the package has a hat
+%define package_path %( echo %{package} | tr '_' '/' )
+
+%define _topdir /scratch/z5/rpmbuild
+%define tmpdir /scratch/z5/tmpbuild
+%define _tmppath /scratch/z5/tmp
+
+Name: %{project}_%{package}
+Version:%{maj_version}.%{min_version}.%{patch_version}
+Release: 0
+Vendor: LHCb
+Summary: %{project}
+License: GPL
+Group: LHCb
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{name}-buildroot
+BuildArch: noarch
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+
+%description
+%{fullname}
+
+%prep
+echo "Building <%{fullname}>"
+
+%build
+
+%install
+
+cd %_topdir/SOURCES
+wget -nc %url
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+gzip -dc %_topdir/SOURCES/%{filename} | tar -xvvf -
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+%post
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+/opt/lhcb/lhcb/%{project}/%{package_path}/%{lbversion}/
+
+%ghost /opt/lhcb/lhcb/%{project}/cmt/
+
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+
