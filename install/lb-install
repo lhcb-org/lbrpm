@@ -17,11 +17,17 @@ import time
 import traceback
 from string import Template
 
+__RCSID__ = "$Id$"
+
+
 # Checking whether the MYSITEROOT is set correctly
 ###############################################################################
 class LbInstallConfig(object):
-
+    """ Configuration object for the installer. All options and defaults
+    should be kept in an isntance of this class """
+    
     def __init__(self):
+        """ Constructor for the config oobject """
         # Check the mysiteroot
         if not os.environ.has_key("MYSITEROOT"):
             raise LbInstallException("Missing MYSITEROOT variable in the environment.")
@@ -37,9 +43,12 @@ class LbInstallConfig(object):
         self.txt_python_version = ".".join([str(k) for k in self.python_version])
         # version of teh script itself
         self.script_version = '120419'
+        # Simple logger by default
+        self.log = logging.getLogger()
 
 
     def setLogger(self):
+        """ Defines a custom logger """
         # Setting the logger
         thelog = logging.getLogger()
         thelog.setLevel(logging.DEBUG)
@@ -62,14 +71,16 @@ class LbInstallConfig(object):
 # Utility to run a command
 ###############################################################################
 def call(command):
-    c = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    out, err = c.communicate()
-    rc = c.returncode
+    """ Wraps up subprocess call and return caches and returns rc, stderr, stdout """
+    pc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    out, err = pc.communicate()
+    rc = pc.returncode
     return (rc, out, err)
 
 # Utility to run a command
 ###############################################################################
 def callSimple(command):
+    """ Simpler wrapper for subprocess """
     rc = subprocess.call(command, shell=True)
     return rc
 
@@ -79,13 +90,12 @@ def checkForCommand(command):
     """ Check whether a command is in the path using which """
     whichcmd = "which %s" % command
     rc, out, err = call(whichcmd)
-    if out != None:
-        out.strip()
     return rc, out
 
 # Utilities for log printout
 ###############################################################################
 def printHeader(config):
+    """ Prints the standard header as in install_project """
     # Start banner
     thelog = config.log
     start_time = time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime())
@@ -97,6 +107,7 @@ def printHeader(config):
 
 
 def printTrailer(config):
+    """ Prints the standard trailer as in install_project """
     # Trailer
     thelog = config.log
     end_time = time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime())
@@ -108,7 +119,7 @@ def printTrailer(config):
 # Checking the command line options
 ###############################################################################
 def parseArgs(config):
-
+    """ Process the command line arguments """
     pname = None
     pversion = None
     binary = None
@@ -156,19 +167,20 @@ def parseArgs(config):
 
 
 class InstallArea(object):
+    """ Class representing the software InstallArea,
+    with all related actions"""
 
     # Initialization of the area
     ##########################################################################
     def __init__(self, config):
         """ Init of the InstallArea, check that all directories and config files
         are present.
-        XXX Should be split """
+        """
         
         # Setting the siteroot
         self.siteroot = config.siteroot
         self.config = config
         self.log = config.log
-        log = self.log
 
         # Setting the main repository URL
         self.repourl = REPOURL
@@ -179,12 +191,49 @@ class InstallArea(object):
         self.rpmprefix = "/opt/lhcb"
         
         # Making sure the db is initialized
-        self.dbpath = os.path.join(self.siteroot, svar, slib, srpm)
+        self.dbpath = os.path.join(self.siteroot, SVAR, SLIB, SRPM)
+        self.initRPMDB()
+
+        # Initializing yum config
+        self.etc = os.path.join(self.siteroot, SETC)
+        self.yumconf = os.path.join(self.etc, "yum.conf")
+        self.yumreposd = os.path.join(self.etc, "yum.repos.d")
+        self.yumrepolhcb = os.path.join(self.yumreposd, "lhcb.repo")
+        self.initYUM()
+        
+        # tmp directory
+        self.tmpdir = os.path.join(self.siteroot, STMP) 
+        if not os.path.exists(self.tmpdir):
+            os.makedirs(self.tmpdir)            
+
+        # Local bin directory
+        self.usrbin =  os.path.join(self.siteroot, SUSR, SBIN)
+        if not os.path.exists(self.usrbin):
+            os.makedirs(self.usrbin)
+        # Add the local bin to the path
+        os.environ['PATH'] = os.pathsep.join([os.environ['PATH'], self.usrbin])
+
+        # Defining structures and
+        # Checking if all needed tools are available
+        self.externalStatus = {}
+        self.requiredExternals = [ 'yum', 'rpm', 'yumdownloader' ]
+        self.externalFix = {}
+        self.externalFix['yumdownloader']  = self._getYumdownloader
+        self.checkPrerequisites()
+        
+        # And if all the software is there
+        self.initfile = None
+        self.checkRepository()
+
+
+    def initRPMDB(self):
+        """ Initialize RPM database """
+        log = self.log
         log.info("RPM DB in %s" % self.dbpath)
         if not os.path.exists(self.dbpath):
             log.info("Creating directory %s for RPM db" % self.dbpath)
             os.makedirs(self.dbpath)
-
+            
         if not os.path.exists(os.path.join(self.dbpath, "Packages")):
             log.info("Initializing RPM db")
             cmd = "rpm --dbpath %s --initdb" % self.dbpath
@@ -194,42 +243,24 @@ class InstallArea(object):
             log.debug(stderr)
             if rc != 0:
                 raise Exception("Error initilializing RPM DB: %s" % stderr)
-                
-        self.etc = os.path.join(self.siteroot, setc)
-        self.yumconf = os.path.join(self.etc, "yum.conf")
+
         
+    def initYUM(self):
+        """ Initializes yum DB """
         if not os.path.exists(self.etc):
             os.makedirs(self.etc)
         if not os.path.exists(self.yumconf):
-            f = open(self.yumconf, 'w')
-            f.write(getYumConf(self.siteroot))
-            f.close()
+            ycf = open(self.yumconf, 'w')
+            ycf.write(getYumConf(self.siteroot))
+            ycf.close()
 
-        self.yumreposd = os.path.join(self.etc, "yum.repos.d")
-        self.yumrepolhcb = os.path.join(self.yumreposd, "lhcb.repo")
         if not os.path.exists(self.yumreposd):
             os.makedirs(self.yumreposd)
         if not os.path.exists(self.yumrepolhcb):
-            f = open(self.yumrepolhcb, 'w')
-            f.write(getYumRepo(self.siteroot, self.rpmsurl))
-            f.close()
+            yplf = open(self.yumrepolhcb, 'w')
+            yplf.write(getYumRepo(self.siteroot, self.rpmsurl))
+            yplf.close()
 
-        # tmp directory
-        self.tmpdir = os.path.join(self.siteroot, stmp) 
-        if not os.path.exists(self.tmpdir):
-            os.makedirs(self.tmpdir)            
-
-        # Local bin directory
-        self.usrbin =  os.path.join(self.siteroot, susr, sbin)
-        if not os.path.exists(self.usrbin):
-            os.makedirs(self.usrbin)
-        # Add the local bin to the path
-        os.environ['PATH'] = os.pathsep.join([os.environ['PATH'], self.usrbin])
-
-        # Checking if all needed tools are available
-        self.checkPrerequisites(config)
-        # And if all the software is there
-        self.checkRepository(config)
 
     def _getYumdownloader(self):
         """ Downloads the version of yumdownloader from the extras directory
@@ -243,61 +274,59 @@ class InstallArea(object):
         urllib.urlretrieve (url, ydpath)
         os.chmod(ydpath, 0755)
 
-    def checkPrerequisites(self, config):
+    def checkPrerequisites(self):
         """ Checks that external tools required by this tool to perform
         the installation """
 
         # Flag indicating whether a crucial external is missing and we cannot run
         externalMissing = False
         
-        self.externalStatus = {}
-        self.requiredExternals = [ 'yum', 'rpm', 'yumdownloader' ]
-        self.externalFix = {}
-        self.externalFix['yumdownloader']  = self._getYumdownloader
-
         for e in self.requiredExternals:
             rc, out = checkForCommand(e)
             self.externalStatus[e] = (rc, out)
 
-        for k, v in self.externalStatus.items():
-            rc, file = v
+        for key, val in self.externalStatus.items():
+            rc, exefile = val
             if rc == 0:
-                self.log.info("%s: Found %s", k, file.strip())
+                self.log.info("%s: Found %s", key, exefile.strip())
             else:
-                self.log.info("%s: Missing - trying compensatory measure", k)
-                fix = self.externalFix[k]
+                self.log.info("%s: Missing - trying compensatory measure", key)
+                fix = self.externalFix[key]
                 if fix != None:
                     fix()
-                    rc2, out2 = checkForCommand(e)
-                    self.externalStatus[k] = (rc2, out2)
+                    rc2, out2 = checkForCommand(key)
+                    self.externalStatus[key] = (rc2, out2)
                     if rc2 == 0:
-                        self.log.info("%s: Found %s", k, out2)
+                        self.log.info("%s: Found %s", key, out2)
                     else:
-                        self.log.error("%s: missing", k)
+                        self.log.error("%s: missing", key)
                         externalMissing = True
                 else:
                     externalMissing = True
+        return externalMissing
+    
 
-    def checkRepository(self, config):
+    def checkRepository(self):
+        """ Checks whether the repository was initialized """
         self.initfile = os.path.join(self.etc, "repoinit")
         if not os.path.exists(self.initfile):
-            self.installRpm("LBSCRIPTS", self.config)
-            f = open(self.initfile, "w")
-            f.write(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
-            f.close()
-            pass
+            self.installRpm("LBSCRIPTS")
+            fini = open(self.initfile, "w")
+            fini.write(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
+            fini.close()
         else:
             self._yumcheckupdate()
             
     # Pass through commands to RPM and yum
     ##########################################################################    
     def rpm(self, args):
+        """ Wrapper for invocation of RPM """
         install_mode = False
         query_mode = False
-        for a in args:
-            if a.startswith("-i"):
+        for arg in args:
+            if arg.startswith("-i"):
                 install_mode = True
-            if a.startswith("-q"):
+            if arg.startswith("-q"):
                 query_mode = True
 
         rpmcmd = "rpm --dbpath %s " % self.dbpath
@@ -312,6 +341,7 @@ class InstallArea(object):
         return rc
 
     def yum(self, args, yumusercommand="yum"):
+        """ Wrapper for invocation of YUM  """
         yumcmd = "%s -c %s  " % (yumusercommand, self.yumconf)
         yumcmd += " ".join(args)
         print yumcmd
@@ -323,11 +353,13 @@ class InstallArea(object):
     # Various utility methods to download/check RPMs
     ##########################################################################
     def _checkRpmFile(self, filename):
+        """ Checks the integrity of an RPM file """
         ret = False
         rpmcmd = "rpm -K %s " % filename
         self.log.debug("RPM command:")
         self.log.debug(rpmcmd)
         rc, stdout, stderr = call(rpmcmd)
+        self.log.debug("Call returned %s %s" % (stdout, stderr))
         if rc == 0:
             ret = True
         return ret
@@ -337,14 +369,14 @@ class InstallArea(object):
         """ Parse a line with the format:
         DBASE_Det_SQLDDDB.noarch           7.5.0-0    lhcb"""
         ret = None
-        m = re.match("\s*([\w\.\_\-]+)\s+([\w\.\_\-]+)\s+([\w\.\_\-]+)\s*", line)
-        if m != None:
-            tmp = m.group(1)
-            version = m.group(2)
-            group = m.group(3)
+        ma = re.match("\s*([\w\.\_\-]+)\s+([\w\.\_\-]+)\s+([\w\.\_\-]+)\s*", line)
+        if ma != None:
+            tmp = ma.group(1)
+            version = ma.group(2)
+            group = ma.group(3)
             name, arch = tmp.rsplit('.', 1)
-            return [name, version, arch, group]
-
+            ret = [name, version, arch, group]
+        return ret
         
     def _yumcheckupdate(self):
         """ Check if updates are available using yum check-update"""
@@ -358,22 +390,22 @@ class InstallArea(object):
         if rc == 100:
             # This means we have files to get,
             # parse the output...
-            for l in stdout.splitlines():
+            for li in stdout.splitlines():
                 # Hack checking whether we have the used group names
                 # lhcb or lcg in the list
-                if l.find("lhcb") > 0 or l.find("lcg")>0:
-                    m = self._parseyumoutputline(l)
-                    if m != None:
-                        self.log.info("Need to update to %s %s %s" % (m[0], m[1], m[2]))
-                        updates.append("%s-%s.%s" %(m[0], m[1], m[2]))
+                if li.find("lhcb") > 0 or li.find("lcg")>0:
+                    ma = self._parseyumoutputline(li)
+                    if ma != None:
+                        self.log.info("Need to update to %s %s %s" % (ma[0], ma[1], ma[2]))
+                        updates.append("%s-%s.%s" %(ma[0], ma[1], ma[2]))
         elif rc != 0:
             self.log.error(stderr)
             raise Exception("Problem checking for updates: %s" % stderr)
 
         if len(updates) > 0:
             print "#### Planning to update:"
-            for u in updates:
-                print "#### %s" % u
+            for updt in updates:
+                print "#### %s" % updt
         
 
     def _yumfindpackage(self, name, version, cmtconfig):
@@ -387,10 +419,11 @@ class InstallArea(object):
         # making sure CMTCONFIG is in right format
         if cmtconfig != None:
             cmtconfig = cmtconfig.replace("-", "_")
+
         # Now calling the command and finding matches
         matches = []
-        p = subprocess.Popen(ydcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        for line in p.stdout:
+        pc = subprocess.Popen(ydcmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in pc.stdout:
             line = line.strip()
             self.log.debug("yum list: %s" % line)
             name_match = False
@@ -407,10 +440,10 @@ class InstallArea(object):
 
             self.log.debug("Match: %s %s %s" % ( name_match, version_match, config_match))
             if name_match and version_match and config_match:
-                m = self._parseyumoutputline(line)
-                if m != None:
-                    self.log.debug("Foun match %s %s %s" % (m[0], m[1], m[2]))
-                    matches.append("%s-%s.%s" %(m[0], m[1], m[2]))
+                ma = self._parseyumoutputline(line)
+                if ma != None:
+                    self.log.debug("Foun match %s %s %s" % (ma[0], ma[1], ma[2]))
+                    matches.append("%s-%s.%s" %(ma[0], ma[1], ma[2]))
 
         # Sorting and checking which one to install
         if len(matches) > 1:
@@ -425,6 +458,7 @@ class InstallArea(object):
         return matches
 
     def _getdownloadurls(self, filename):
+        """ Uses yum to list the URLs for RPMs to download """
         ydcmd = "yumdownloader -c %s  " % self.yumconf
         ydcmd += " --quiet --resolve --urls --destdir=%s " % self.tmpdir
         ydcmd += filename
@@ -441,13 +475,13 @@ class InstallArea(object):
 
         # Normally yumdownloader will return the list of urls
         urls = []
-        for l in stdout.splitlines():
+        for li in stdout.splitlines():
             # Ignore lines starting with "-" as they are logs
             # printed out, even in quiet mode.
             # Only keeps URLs, starting with http or file, in practice
-            u = l.strip()
-            if u.startswith("http") or u.startswith("ftp"):
-                urls.append(u.strip())
+            url = li.strip()
+            if url.startswith("http") or url.startswith("ftp"):
+                urls.append(url.strip())
         return urls
 
     def _filterUrlsAlreadyInstalled(self, urls):
@@ -456,7 +490,9 @@ class InstallArea(object):
         for url in urls:
             # Establishing the filename
             (pre, filename) = url.rsplit("/", 1)
+            self.log.debug("Prefix: %s" % pre)
             name, suffix = filename.rsplit(".", 1)
+            self.log.debug("Suffix: %s" % suffix)
             self.log.info("Checking for installation of: %s", name)
             if not self._isRpmInstalled(name):
                 toinstall.append(url)
@@ -465,11 +501,13 @@ class InstallArea(object):
         return toinstall
 
     def _downloadfiles(self, urls, location):
+        """ Downloads a list of files """
         import urllib
         files = []
         for url in urls:
             # Establishing the filename
             (pre, filename) = url.rsplit("/", 1)
+            self.log.debug("Prefix: %s" % pre)            
             full_filename = os.path.join(location, filename)
             files.append(filename)
 
@@ -489,6 +527,7 @@ class InstallArea(object):
         return files
 
     def _installfiles(self, files, rpmloc):
+        """ Install some rpm files given the location of the RPM DB """
         fulllist = [ os.path.join(rpmloc, f) for f in files ]
         args = [ "-ivh " ] + fulllist
         rc = self.rpm(args)
@@ -497,6 +536,7 @@ class InstallArea(object):
 
 
     def _isRpmInstalled(self, rpmname):
+        """ Checks whether a given RPM apckage is already installed """
         installed = False
         rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-q', rpmname ]
         self.log.debug("RPM command:" + " ".join(rpmcmd))
@@ -508,14 +548,15 @@ class InstallArea(object):
 
     # Methods to download/install RPMs (replacement for yum install)
     ##########################################################################
-    def install(self, project, version, cmtconfig, config):
-
+    def install(self, project, version, cmtconfig):
+        """ Perform the whole download/install procedure (equivalent to
+        yum install """
         # Looking for the package
         rpmname = None
         matches = self._yumfindpackage(project, version, cmtconfig)
         self.log.info("Found %d matches" % len(matches))
-        for m in matches:
-            self.log.info("Found RPM: %s" % m)
+        for ma in matches:
+            self.log.info("Found RPM: %s" % ma)
         if len(matches) == 0:
             self.log.error("No matching file found - EXITING")
             raise LbInstallException("No matching file found")
@@ -530,9 +571,10 @@ class InstallArea(object):
         if self._isRpmInstalled(rpmname):
             self.log.warning("%s already installed" % rpmname)
         else:
-            self.installRpm(rpmname, config)
+            self.installRpm(rpmname)
                 
-    def installRpm(self, rpmname, config):
+    def installRpm(self, rpmname):
+        """ install a specific RPM, checking if not installed already """
         self.log.info("Installing %s and dependencies" % rpmname)
 
         # Checking what files shoudl be downlaoded using yumdownloader
@@ -556,7 +598,7 @@ class InstallArea(object):
 # Generators for the YumConfigurations
 ##########################################################################
 def getYumConf(siteroot):
-
+    """ Builds the Yum configuration from template """
     cfile = Template("""
 [main]
 #CONFVERSION 0001
@@ -576,6 +618,7 @@ reposdir=/etc/yum.repos.d
     return cfile
 
 def getYumRepo(siteroot, url):
+    """ Builds the Yum repository configuration from template """
     cfile = Template("""
 [lhcb]
 #REPOVERSION 0001
@@ -589,6 +632,7 @@ enabled=1
 # Usage for the script
 ###############################################################################
 def usage(cmd) :
+    """ Prints out how to use the script... """
     cmd = os.path.basename(cmd)
     print """\n%(cmd)s -  install a project in the MYSITEROOT directory'
     
@@ -626,9 +670,11 @@ def buildRPMName(project, version, cmtconfig):
 # Class for known install exceptions
 ###############################################################################
 class LbInstallException(Exception):
-
+    """ Custom exception for lb-install """
+    
     def __init__(self, msg):
-        super(LbInstallException, self).__init__(msg)
+        """ Constructor for the exception """
+        Exception.__init__(msg)
 
 
 # Main method for the tool  
@@ -639,18 +685,19 @@ MODE_RPM     = "rpm"
 MODE_YUM     = "yum"
 
 # Constants for the dir names
-svar = "var"
-slib = "lib"
-srpm = "rpm"
-setc = "etc"
-stmp = "tmp"
-susr = "usr"
-sbin = "bin"
+SVAR = "var"
+SLIB = "lib"
+SRPM = "rpm"
+SETC = "etc"
+STMP = "tmp"
+SUSR = "usr"
+SBIN = "bin"
 
 # Default repository URL
-REPOURL="http://test-lbrpm.web.cern.ch/test-lbrpm/"
+REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm/"
 
 def main():
+    """ Main method for the comamnd """
     rc = 0
     mode = MODE_INSTALL 
     try:
@@ -687,7 +734,7 @@ def main():
             # Mode where the comamnds are installed by name
             log = config.setLogger()
             installArea = InstallArea(config)
-            rc = installArea.installRpm(args[2], config)
+            rc = installArea.installRpm(args[2])
         else:
             # In this case we are in normal install mode
             pname, pversion, binary = parseArgs(config)
@@ -701,7 +748,7 @@ def main():
             
             # Creating the install area object
             installArea = InstallArea(config)
-            installArea.install(pname, pversion, binary, config)
+            installArea.install(pname, pversion, binary)
             printTrailer(config)
     except LbInstallException, lie:
         print >> sys.stderr, "ERROR: " + str(lie)
@@ -713,10 +760,10 @@ def main():
         traceback.print_exc(file=sys.stderr)
         print >> sys.stderr, '-'*60
         rc = 1
-    exit(rc)
+    return rc
 
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 
