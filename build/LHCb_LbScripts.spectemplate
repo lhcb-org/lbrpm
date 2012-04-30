@@ -4,14 +4,13 @@
 %define cmtconfig_rpm %( echo %{cmtconfig} | tr '-' '_' )
 %define rpmversion %{lbversion}%{cmtconfig_rpm}
 
-
-%define _topdir /scratch/z5/rpmbuild
-%define tmpdir /scratch/z5/tmpbuild
-%define _tmppath /scratch/z5/tmp
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
 
 Name: %{project}
-Version:6.7.4
-Release: 2
+Version:%{maj_version}.%{min_version}.%{patch_version}
+Release: %{release}
 Vendor: LHCb
 Summary: %{project}
 License: GPL
@@ -56,8 +55,14 @@ fi
 
 %post
 
+if [ "$MYSITEROOT" ]; then
+  PREFIX=$MYSITEROOT
+else
+  PREFIX=/opt/lhcb
+fi
+
 echo "Invoking LbScripts post-install script"
-${MYSITEROOT}/lhcb/LBSCRIPTS/LBSCRIPTS_%{lbversion}/LbScriptsSys/cmt/PostInstall.py
+${PREFIX}/lhcb/LBSCRIPTS/LBSCRIPTS_%{lbversion}/LbScriptsSys/cmt/PostInstall.py
 
 
 %postun

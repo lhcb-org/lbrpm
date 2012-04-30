@@ -1,3 +1,4 @@
+
 %define cmtconfig %{config}
 %define filename %{project}_%{project}_%{lbversion}%{cmtconfig}.tar.gz
 %define url http://lhcbproject.web.cern.ch/lhcbproject/dist/%{project}/%{filename}

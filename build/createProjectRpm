@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 
+
 log = logging.getLogger()
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.INFO)
@@ -51,6 +52,9 @@ parser.add_option("--versioned", dest="useVersion", action="store_true",
 parser.add_option("--buildarea", dest="buildarea", action="store",
                   help="Location where the RPM is build",
                   default = "/tmp/buildarea")
+parser.add_option("--release", dest="release", action="store",
+                  help="Release number",
+                  default = "0")
 
 (options, args) = parser.parse_args()
 
@@ -71,10 +75,15 @@ if len(args) > 2:
     cmtconfig = args[2]
 
 useVersion = options.useVersion
+
+# Forcing for LbScripts
+if project.upper() == "LBSCRIPTS":
+    useVersion = True
 log.info("Creating RPM for <%s> <%s> <%s>  - use version: %s" % (project, version, cmtconfig, useVersion))
 
 
 buildarea = options.buildarea
+release = options.release
 checkBuildAra(buildarea)
 log.info("Using build area: %s" % buildarea)
 
@@ -116,7 +125,6 @@ if deps != None and len(deps) > 0:
 else:
     log.info("RPM Without dependencies")
 
-
 # Now preparing rpmbuild command
 ################################################################################
 def addDefine(param, val):
@@ -129,6 +137,7 @@ cmd += addDefine("build_area", buildarea)
 cmd += addDefine("project", project)
 cmd += addDefine("orig_project", orig_project)
 cmd += addDefine("lbversion", version)
+cmd += addDefine("release", release)
 if cmtconfig != '':
     cmd += addDefine("config", "_" + cmtconfig)
 else:
@@ -138,11 +147,13 @@ cmd += addDefine("min_version", min_version)
 cmd += addDefine("patch_version", patch_version)
 cmd += addDefine("packarch", "noarch")
 
-
-if useVersion:
-    cmd += " -bb " + os.path.join(local_directory, "LHCb_VersionedProject.spectemplate")
+if project.upper() == "LBSCRIPTS":
+    cmd += " -bb " + os.path.join(local_directory, "LHCb_LbScripts.spectemplate")
 else:
-    cmd += " -bb " + os.path.join(local_directory, "/LHCb_Project.spectemplate"
+    if useVersion:
+        cmd += " -bb " + os.path.join(local_directory, "LHCb_VersionedProject.spectemplate")
+    else:
+        cmd += " -bb " + os.path.join(local_directory, "LHCb_Project.spectemplate")
 
 log.info("Running: %s" % cmd)
 rc = subprocess.call(cmd, shell=True)

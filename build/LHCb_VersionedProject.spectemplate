@@ -12,7 +12,7 @@
 
 Name: %{project}
 Version:%{maj_version}.%{min_version}.%{patch_version}
-Release: 0
+Release: %{release}
 Vendor: LHCb
 Summary: %{project}
 License: GPL

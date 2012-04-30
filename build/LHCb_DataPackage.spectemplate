@@ -5,13 +5,13 @@
 # This is to deal with the case when the package has a hat
 %define package_path %( echo %{package} | tr '_' '/' )
 
-%define _topdir /scratch/z5/rpmbuild
-%define tmpdir /scratch/z5/tmpbuild
-%define _tmppath /scratch/z5/tmp
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
 
 Name: %{project}_%{package}
 Version:%{maj_version}.%{min_version}.%{patch_version}
-Release: 0
+Release: %{release}
 Vendor: LHCb
 Summary: %{project}
 License: GPL
@@ -22,6 +22,7 @@ BuildArch: noarch
 AutoReqProv: no
 Prefix: /opt/lhcb
 Provides: /bin/sh
+Requires(post): LBSCRIPTS
 
 %description
 %{fullname}
@@ -53,6 +54,25 @@ if [ $? -ne 0 ]; then
 fi
 
 %post
+
+if [ "$MYSITEROOT" ]; then
+  PREFIX=$MYSITEROOT
+else
+  PREFIX=/opt/lhcb
+fi
+
+
+if [ -f $PREFIX/lhcb/%{project}/%{package_path}/%{lbversion}/cmt/Update.py ]; then
+  echo "Running Update script"
+  . $PREFIX/LbLogin.sh --silent --mysiteroot=$PREFIX
+  python $PREFIX/lhcb/%{project}/%{package_path}/%{lbversion}/cmt/Update.py
+fi
+
+if [ -f $PREFIX/lhcb/%{project}/%{package_path}/%{lbversion}/cmt/PostInstall.py ]; then
+  echo "Running PostInstall script"
+  . $PREFIX/LbLogin.sh --silent --mysiteroot=$PREFIX
+  python $PREFIX/lhcb/%{project}/%{package_path}/%{lbversion}/cmt/PostInstall.py
+fi
 
 %postun
 
