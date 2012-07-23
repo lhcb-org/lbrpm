@@ -27,7 +27,6 @@ class BaseDependency(object):
         self.flags = flags
         self.standardVersion = BaseDependency.getStandardVersion(version)
 
-
     @classmethod
     def getStandardVersion(cls, version):
         """ parse the version and return the list of major, minor,etc version numbers """
@@ -62,31 +61,29 @@ class BaseDependency(object):
 
     def __cmp__(self, other):
         """ Comparison method for dependencies """
-
-        # First check the objects types and package names
-        if type(self) != type(other):
-            return cmp(type(self), type(other))
+        if other == None:
+            return -1
+        
+        if self.name != other.name:
+            return cmp(self.name, self.other)
         else:
-            if self.name != other.name:
-                return cmp(self.name, self.other)
+            # At this point we can compare the versions
+            if self.standardVersion == None or other.standardVersion == None:
+                # We couldn't parse the version as a standard x.y.z for both
+                # In this case we do string comparison
+                return cmp(self.version, other.version)
             else:
-                # At this point we can compare the versions
-                if self.standardVersion == None or other.standardVersion == None:
-                    # We couldn't parse the version as a standard x.y.z for both
-                    # In this case we do string comparison
-                    return cmp(self.version, other.version)
+                # In this case we can compare the version lists
+                cmpVers =  BaseDependency.cmpStandardVersion(self.standardVersion, other.standardVersion)
+                if cmpVers != 0:
+                    # Versions are different we do not need to compare release numbers
+                    return cmpVers
                 else:
-                    # In this case we can compare the version lists
-                    cmpVers =  BaseDependency.cmpStandardVersion(self.standardVersion, other.standardVersion)
-                    if cmpVers != 0:
-                        # Versions are different we do not need to compare release numbers
-                        return cmpVers
+                    # Comparing down to the release numbers
+                    if self.release != None and self.release.isdigit() and other.release != None and other.release.isdigit():
+                        return cmp(int(self.release), int(other.release))
                     else:
-                        # Comparing down to the release numbers
-                        if self.release != None and self.release.isdigit() and other.release != None and other.release.isdigit():
-                            return cmp(int(self.release), int(other.release))
-                        else:
-                            return cmp(self.release, other.release)
+                        return cmp(self.release, other.release)
 
 
 class Provides(BaseDependency):
@@ -98,10 +95,19 @@ class Provides(BaseDependency):
         self.package = package
 
 class Requires(BaseDependency):
+    
     """ Class representing a functionality required by a package """
     def __init__(self, name, version, release, epoch=None, flags=None, pre=None):
         super( Requires, self ).__init__(name, version, release, epoch, flags)
         self.pre = pre
+
+        self.comparators = {}
+        self.comparators['EQ'] = lambda x: self == x
+        self.comparators['LT'] = lambda x: x < self
+        self.comparators['LE'] = lambda x: x <= self
+        self.comparators['GT'] = lambda x: x > self
+        self.comparators['GE'] = lambda x: x >= self
+        
 
     def provideMatches(self, provide):
         """ returns true if the provide passed in parameter matches the requirement """
@@ -109,13 +115,9 @@ class Requires(BaseDependency):
         if provide.name != self.name:
             return False
 
-        # TODO
-        if self.flags == "EQ":
-            return self == provide
-
-
-
-
+        ctor =  self.comparators[self.flags]
+        return ctor(provide)
+        
 
 # Package: Class representing a package available for installation
 ###############################################################################
@@ -132,6 +134,8 @@ class Package(object):
 
         p = Package()
         for cn in packageNode.childNodes:
+            if cn.nodeType != xml.dom.Node.ELEMENT_NODE:
+                continue
             if cn.tagName == "name":
                 p.name = Package._getNodeText(cn)
             elif cn.tagName == "arch":
@@ -144,10 +148,14 @@ class Package(object):
                 p.location = cn.getAttribute("href")
             elif cn.tagName == "format":
                 for fnode in cn.childNodes:
+                    if fnode.nodeType != xml.dom.Node.ELEMENT_NODE:
+                        continue
                     if fnode.tagName == "rpm:group":
                         p.group =  Package._getNodeText(fnode)
                     if fnode.tagName == "rpm:provides":
                         for dep in fnode.childNodes:
+                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
+                                continue
                             depname = dep.getAttribute("name")
                             depver = dep.getAttribute("ver")
                             deprel = dep.getAttribute("rel")
@@ -158,6 +166,8 @@ class Package(object):
                                                        depepoch, depflags, p))
                     if fnode.tagName == "rpm:requires":
                         for dep in fnode.childNodes:
+                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
+                                continue
                             depname = dep.getAttribute("name")
                             depver = dep.getAttribute("ver")
                             deprel = dep.getAttribute("rel")
@@ -193,7 +203,6 @@ class Package(object):
         self.requires = []
         self.provides = []
 
-
     def getProvideVersion(self, provideName):
         """ Returns the version that the package provides for a given
         capability"""
@@ -227,38 +236,44 @@ class Repository(object):
     def __init__(self):
         self.mPackages = {}
         self.mProvides = {}
+        # These are hardwired dependencies in RPM.
+        # we do not need to care about them...
         self.mIgnoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
 
     #
     # Method to load a primary.xml.gz YUM repository file
     ###########################################################################
-    def loadYumMetadata(self, filename):
+    def loadYumMetadataFile(self, filename):
         """ Loads the yum XML package list """
-        #f = open(filename, "r")
-        # parsing the file
-        f = gzip.open(filename, 'rb')
+        f = gzip.open(filename, 'rb')        
         try:
             dom = xml.dom.minidom.parse(f)
-
-            # Finding all packages and adding then to the repository
-            for n in dom.documentElement.childNodes:
-                if n.nodeType == xml.dom.Node.ELEMENT_NODE:
-                    # Generating the package object from the XML
-                    p = Package.fromYumXML(n)
-
-                    # Adding the package to the repository
-                    self._addPackage(p)
-                    self._addAllProvides(p)
-
-                    log.debug("Added %s package <%s><%s><%s>" % (p.group, p.name, p.version, p.rel))
-
-                    # Checking the Package type...
-                    if n.getAttribute("type") != "rpm":
-                        log.warning("Package type for %s is %s not RPM" % (p.name, n.getAttribute("type")))
+            self.loadYumMetadataDOM(dom)
         except Exception, e:
             log.error("Error while parsing file %s: %s" % (filename, str(e)))
             raise e
         f.close()
+
+    #
+    # Method to load a primary.xml.gz YUM repository file
+    ###########################################################################
+    def loadYumMetadataDOM(self, dom):
+        """ Loads the yum XML package list """
+        # Finding all packages and adding then to the repository
+        for n in dom.documentElement.childNodes:
+            if n.nodeType == xml.dom.Node.ELEMENT_NODE:
+                # Generating the package object from the XML
+                p = Package.fromYumXML(n)
+
+                # Adding the package to the repository
+                self._addPackage(p)
+                self._addAllProvides(p)
+
+                log.debug("Added %s package <%s><%s><%s>" % (p.group, p.name, p.version, p.rel))
+
+                # Checking the Package type...
+                if n.getAttribute("type") != "rpm":
+                    log.warning("Package type for %s is %s not RPM" % (p.name, n.getAttribute("type")))
 
     #
     # Public method to lookup dependencies for a package
@@ -322,24 +337,8 @@ class Repository(object):
     #
     # Private methods to track needed packages
     ###########################################################################
-#    def _findPackageByProvideNameVer(self, provide, version, release = None):
-#        """ Utility function to locate a package providing a given functionality """
-#
-#        package = None
-#        try:
-#            availableVersions = self.mProvides[provide]
-#            if availableVersions != None:
-#                if (version == None or len(version)==0) and len(availableVersions) > 0:
-#                    # To do: GET THE LASTEST instead of the first
-#                    package = availableVersions[0]
-#                for p in availableVersions:
-#                    if p.version == version:
-#                        package = p
-#        except KeyError:
-#            log.error("Could not find package providing %s-%s" % (provide, version))
-#        return package
 
-    def _findPackageMatchingRequire(self, requirement):
+    def findPackageMatchingRequire(self, requirement):
         """ Utility function to locate a package providing a given functionality """
 
         if requirement == None:
@@ -354,24 +353,26 @@ class Repository(object):
                     package = sorted(availableVersions)[-1].package
                 else:
                     # Trying to match the requirements and what is available
-                    for p in availableVersions:
-                        if p.version == requirement.version:
-                            package = p.package
+                    matching = [ p for p in availableVersions if requirement.provideMatches(p) ]
+                    if len(matching) > 0:
+                        package = sorted(matching)[-1].package
         except KeyError:
             log.error("Could not find package providing %s-%s" % (requirement.name, requirement.version))
+        
+        if package == None:
+            log.error("Could not find package providing %s-%s" % (requirement.name, requirement.version))
+
         return package
 
 
     def _getpackageDeps(self, package):
         requires = []
-        # These are hardwired dependencies in RPM.
-        # we do not need to care about them...
         # Now iterating on all requires to find the matching requirement
         for r in package.requires:
             (reqPackage, reqVersion) = (r.name, r.version)
             if reqPackage not in self.mIgnoredPackages:
                 log.debug("Processing deps %s/%s for package: %s/%s" % (reqPackage, reqVersion, package.name, package.version))
-                p = self._findPackageMatchingRequire(r)
+                p = self.findPackageMatchingRequire(r)
                 if p != None:
                     requires.append(p)
                     for subreq in self._getpackageDeps(p):
@@ -393,10 +394,11 @@ class LbYumClient(object):
         self.repourl = "https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/"
         self.remotePrimaryXml = self.repourl + "repodata/primary.xml.gz"
         self.localPrimaryXml = "/afs/cern.ch/work/b/bcouturi/www/rpm/repodata/primary.xml.gz"
+        self.localPrimaryXml = "/home/lben/primary.xml.gz"
 
         # Creating the repository, and loading the XML
         self.repository = Repository()
-        self.repository.loadYumMetadata(self.localPrimaryXml)
+        self.repository.loadYumMetadataFile(self.localPrimaryXml)
 
     def getDependencies(self, packageName, version):
         alldeps = self.repository.getDependencies(packageName, version)
@@ -417,7 +419,5 @@ if __name__ == '__main__':
             print len(l), p
             for pa in sorted(l):
                 print "%s.%s-%s" % (pa.name, pa.version, pa.release)
-
-
 
     r.getDependencies("DAVINCI_v30r2p3_x86_64_slc5_gcc46_opt", "1.0.0")
