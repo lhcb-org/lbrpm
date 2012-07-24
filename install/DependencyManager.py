@@ -12,7 +12,9 @@ Created on Jun 29, 2012
 import xml.dom.minidom
 import logging
 import gzip
+import inspect
 import os
+import pickle
 import re
 import urllib
 
@@ -40,13 +42,24 @@ class VersionedObject(object):
         self.flags = flags
         self.standardVersion = VersionedObject.getStandardVersion(version)
 
-        self.comparators = {}
-        self.comparators['EQ'] = lambda x: self == x
-        self.comparators['LT'] = lambda x: x < self
-        self.comparators['LE'] = lambda x: x <= self
-        self.comparators['GT'] = lambda x: x > self
-        self.comparators['GE'] = lambda x: x >= self
+        # Can't pickle lambda's
+#        self.comparators = {}
+#        self.comparators['EQ'] = lambda x: self == x
+#        self.comparators['LT'] = lambda x: x < self
+#        self.comparators['LE'] = lambda x: x <= self
+#        self.comparators['GT'] = lambda x: x > self
+#        self.comparators['GE'] = lambda x: x >= self
 
+    def eq(self, x):
+        return self == x
+    def lt(self, x):
+        return x < self
+    def le(self, x):
+        return x <= self
+    def gt(self, x):
+        return x > self
+    def ge(self, x):
+        return x >= self
 
     @classmethod
     def getStandardVersion(cls, version):
@@ -83,8 +96,14 @@ class VersionedObject(object):
         if provide.name != self.name:
             return False
 
-        ctor =  self.comparators[self.flags]
-        return ctor(provide)
+        allmethods = inspect.getmembers(self, predicate=inspect.ismethod)
+        foundMethod = None
+        for m in allmethods:
+            if m[0].lower() == self.flags.lower():
+                log.debug("Found Method " + m[0])
+                foundMethod = m[1]
+        return(foundMethod(provide))
+
 
     def __str__(self):
         """ Display function for the package instance """
@@ -272,7 +291,8 @@ class Package(VersionedObject):
                             requires.append(subreq)
                 else:
                     if reqPackage not in self.repository.mIgnoredPackages:
-                        raise Exception("Package %s.%s-%s not found" % (reqPackage, reqVersion, reqRelease))
+                        log.error("Package %s.%s-%s not found" % (reqPackage, reqVersion, reqRelease))
+                        #raise Exception("Package %s.%s-%s not found" % (reqPackage, reqVersion, reqRelease))
         return requires
 
 
@@ -284,6 +304,7 @@ class Repository(object):
     def __init__(self):
         self.mPackages = {}
         self.mProvides = {}
+        self.mPackageCount = 0
         # These are hardwired dependencies in RPM.
         # we do not need to care about them...
         self.mIgnoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
@@ -295,7 +316,9 @@ class Repository(object):
         """ Loads the yum XML package list """
         f = gzip.open(filename, 'rb')
         try:
+            log.debug("Starting the parsing of the Metadata XML file")
             dom = xml.dom.minidom.parse(f)
+            log.debug("Parsing of the Metadata XML file done")
             self.loadYumMetadataDOM(dom)
         except Exception, e:
             log.error("Error while parsing file %s: %s" % (filename, str(e)))
@@ -308,6 +331,7 @@ class Repository(object):
     def loadYumMetadataDOM(self, dom):
         """ Loads the yum XML package list """
         # Finding all packages and adding then to the repository
+        log.debug("Starting to iterate though Metadata DOM")
         for n in dom.documentElement.childNodes:
             if n.nodeType == xml.dom.Node.ELEMENT_NODE:
                 # Generating the package object from the XML
@@ -316,13 +340,14 @@ class Repository(object):
                 # Adding the package to the repository
                 self._addPackage(p)
                 self._addAllProvides(p)
-
-                log.debug("Added %s package <%s><%s><%s>" % (p.group, p.name, p.version, p.release))
+                self.mPackageCount+= 1
+                #log.debug("Added %s package <%s><%s><%s>" % (p.group, p.name, p.version, p.release))
 
                 # Checking the Package type...
                 if n.getAttribute("type") != "rpm":
                     log.warning("Package type for %s is %s not RPM" % (p.name, n.getAttribute("type")))
 
+        log.debug("Finished to iterate though Metadata DOM")
     #
     # Private methods to update repository
     ###########################################################################
@@ -476,13 +501,17 @@ class LbYumClient(object):
         # Checking if we have a repomd file at all
         (lchecksum, ltimestamp) = (None, None)
         if os.path.exists(self.localRepomdXml):
-            (lchecksum, ltimestamp) = self.checkRepoMD( open(self.localRepomdXml, 'r').read())
+            ftmp = open(self.localRepomdXml, 'r')
+            (lchecksum, ltimestamp) = self.checkRepoMD( ftmp.read())
+            ftmp.close()
 
         # Now checking if we have a
         needUpdate = False
         if (lchecksum != rchecksum) or  (ltimestamp != rtimestamp):
             needUpdate = True
-            open(self.localRepomdXml, 'w').write(data)
+            ftmp =  open(self.localRepomdXml, 'w')
+            ftmp.write(data)
+            ftmp.close()
 
         log.debug("Checking repo metadata for updates returned %s" % needUpdate)
         return needUpdate
@@ -522,22 +551,41 @@ class LbYumClient(object):
         self.primaryurl = self.repourl + "/repodata/primary.xml.gz"
         self.localPrimaryXml = os.path.join(self.lbyumcache, "primary.xml.gz")
         self.localRepomdXml = os.path.join(self.lbyumcache, "repomd.xml")
+        self.localPickledRepo = os.path.join(self.lbyumcache, "repo.data")
 
         if checkForUpdates and self.checkRepoUpdates():
             self.getLatestPrimary()
+            os.unlink(self.localPickledRepo)
 
         # Creating the repository, and loading the XML
-        self.repository = Repository()
-        self.repository.loadYumMetadataFile(self.localPrimaryXml)
-
-
-
+        if os.path.exists(self.localPickledRepo):
+            log.debug("Loading the pickled repository")
+            pr = open(self.localPickledRepo, "r" )
+            self.repository = pickle.load(pr)
+            pr.close()
+            log.debug("Loaded the pickled repository")
+        else:
+            log.debug("Loading the XML repository")
+            self.repository = Repository()
+            self.repository.loadYumMetadataFile(self.localPrimaryXml)
+            log.debug("Pickling the repository")
+            pr = open(self.localPickledRepo, "wb" )
+            pickle.dump(self.repository, pr)
+            pr.close()
 
 
 if __name__ == '__main__':
-    logging.basicConfig()
+    FORMAT = '%(asctime)-15s %(message)s'
+    logging.basicConfig(format=FORMAT)
     log.setLevel(logging.DEBUG)
-    client = LbYumClient("/scratch/rpmsiteroot")
+    #client = LbYumClient("/scratch/rpmsiteroot")
+
+    mysiteroot = "/scratch/lbyumtest"
+    client = LbYumClient(mysiteroot)
+    if not os.path.exists(os.path.join(mysiteroot, SETC, SLBYUMCONF)):
+        client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
+        client = LbYumClient(mysiteroot)
+
     #client.createConfig("https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/")
     #r = client.repository
     #for p in r.mProvides.keys():
@@ -548,8 +596,13 @@ if __name__ == '__main__':
     #            print "%s.%s-%s" % (pa.name, pa.version, pa.release)
 
 
-    p = client.getPackage("DAVINCI_v30r2p3_x86_64_slc5_gcc46_opt", "1.0.0")
-    alldeps = p.getDependencies()
-    for dep in alldeps:
-        print "Need: %s %s" % (dep.name, dep.version)
+    #p = client.getPackage("DAVINCI_v30r2p3_x86_64_slc5_gcc46_opt", "1.0.0")
+    #alldeps = p.getDependencies()
+    #for dep in alldeps:
+    #    print "Need: %s %s" % (dep.name, dep.version)
+    print "There are %d packages in repository" % client.repository.mPackageCount
+    p = client.getPackage("castor-devel", "2.1.9")
+    #alldeps = p.getDependencies()
+    #for dep in alldeps:
+    #    print "Need: %s %s" % (dep.name, dep.version)
 
