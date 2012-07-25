@@ -100,7 +100,6 @@ class VersionedObject(object):
         foundMethod = None
         for m in allmethods:
             if m[0].lower() == self.flags.lower():
-                log.debug("Found Method " + m[0])
                 foundMethod = m[1]
         return(foundMethod(provide))
 
@@ -531,7 +530,7 @@ class LbYumClient(object):
                             timestamp = Package._getNodeText(nc)
         return (checksum, timestamp)
 
-    def __init__(self, localConfigRoot, checkForUpdates=True):
+    def __init__(self, localConfigRoot, checkForUpdates=True, usePickledDB=False):
         """ Constructor for the client """
         # Setting up the variables
         self.localConfigRoot = localConfigRoot
@@ -555,10 +554,11 @@ class LbYumClient(object):
 
         if checkForUpdates and self.checkRepoUpdates():
             self.getLatestPrimary()
-            os.unlink(self.localPickledRepo)
+            if os.path.exists(self.localPickledRepo):
+                os.unlink(self.localPickledRepo)
 
         # Creating the repository, and loading the XML
-        if os.path.exists(self.localPickledRepo):
+        if usePickledDB  and os.path.exists(self.localPickledRepo):
             log.debug("Loading the pickled repository")
             pr = open(self.localPickledRepo, "r" )
             self.repository = pickle.load(pr)
@@ -568,11 +568,11 @@ class LbYumClient(object):
             log.debug("Loading the XML repository")
             self.repository = Repository()
             self.repository.loadYumMetadataFile(self.localPrimaryXml)
-            log.debug("Pickling the repository")
-            pr = open(self.localPickledRepo, "wb" )
-            pickle.dump(self.repository, pr)
-            pr.close()
-
+            if usePickledDB:
+                log.debug("Pickling the repository")
+                pr = open(self.localPickledRepo, "wb" )
+                pickle.dump(self.repository, pr)
+                pr.close()
 
 if __name__ == '__main__':
     FORMAT = '%(asctime)-15s %(message)s'
@@ -580,7 +580,7 @@ if __name__ == '__main__':
     log.setLevel(logging.DEBUG)
     #client = LbYumClient("/scratch/rpmsiteroot")
 
-    mysiteroot = "/scratch/lbyumtest"
+    mysiteroot = "/home/lben/lbyumtest"
     client = LbYumClient(mysiteroot)
     if not os.path.exists(os.path.join(mysiteroot, SETC, SLBYUMCONF)):
         client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
@@ -601,6 +601,14 @@ if __name__ == '__main__':
     #for dep in alldeps:
     #    print "Need: %s %s" % (dep.name, dep.version)
     print "There are %d packages in repository" % client.repository.mPackageCount
+    reqCount = 0
+    provCount = 0
+    for plist in client.repository.mPackages.values():
+        for p in plist:
+            reqCount += len(p.requires)
+            provCount += len(p.provides)
+    print "There are %d requires" % reqCount
+    print "There are %d provides" % provCount            
     p = client.getPackage("castor-devel", "2.1.9")
     #alldeps = p.getDependencies()
     #for dep in alldeps:

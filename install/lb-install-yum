@@ -674,7 +674,7 @@ class LbInstallException(Exception):
     
     def __init__(self, msg):
         """ Constructor for the exception """
-        Exception.__init__(msg)
+        super(LbInstallException, self).__init__(msg)
 
 
 # Main method for the tool  
