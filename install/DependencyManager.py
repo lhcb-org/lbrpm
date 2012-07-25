@@ -42,14 +42,8 @@ class VersionedObject(object):
         self.flags = flags
         self.standardVersion = VersionedObject.getStandardVersion(version)
 
-        # Can't pickle lambda's
-#        self.comparators = {}
-#        self.comparators['EQ'] = lambda x: self == x
-#        self.comparators['LT'] = lambda x: x < self
-#        self.comparators['LE'] = lambda x: x <= self
-#        self.comparators['GT'] = lambda x: x > self
-#        self.comparators['GE'] = lambda x: x >= self
-
+    # Classes used for version comparison
+    ###############################################################################
     def eq(self, x):
         return self == x
     def lt(self, x):
@@ -103,14 +97,6 @@ class VersionedObject(object):
                 foundMethod = m[1]
         return(foundMethod(provide))
 
-
-    def __str__(self):
-        """ Display function for the package instance """
-        return "%s(%s.%s-%s)" %(self.flags, self.name, self.version, self.release)
-
-    def __repr__(self):
-        return self.__str__()
-
     def __cmp__(self, other):
         """ Comparison method for dependencies """
         #log.debug("Comparing %s with %s" % (self, other))
@@ -146,7 +132,18 @@ class VersionedObject(object):
                     else:
                         return cmp(r2, r2)
 
+    # Pretty printing
+    ###############################################################################
+    def __str__(self):
+        """ Display function for the package instance """
+        return "%s(%s.%s-%s)" %(self.flags, self.name, self.version, self.release)
 
+    def __repr__(self):
+        return self.__str__()
+
+
+# Classes actually representing the Require and Provide of the RPM Specs
+###############################################################################
 class Provides(VersionedObject):
     """ Class representing a functionality provided by a package """
     def __init__(self, name, version, release, epoch=None, flags=None, package=None):
@@ -167,6 +164,9 @@ class Requires(VersionedObject):
 ###############################################################################
 class Package(VersionedObject):
 
+    #
+    # Factory that parses the YUM XML and returns a configured package
+    ###########################################################################
     @classmethod
     def fromYumXML(cls, packageNode):
         """ Method that instantiates a correct package instance, based on
@@ -233,7 +233,9 @@ class Package(VersionedObject):
         for t in node.childNodes:
             if t.nodeType == xml.dom.Node.TEXT_NODE:
                 return t.data
-
+    #
+    # Constructor and public method
+    ###########################################################################
     def __init__(self):
         """ Default constructor """
         super( Package, self ).__init__(None, None, None, None, None)
@@ -246,6 +248,18 @@ class Package(VersionedObject):
 
     def setRepository(self, repo):
         self.repository = repo
+
+    def rpmName(self):
+        """ Formats the name of the RPM package"""
+        return "%s-%s-%s" %( self.name, self.version, self.release)
+
+    def rpmFileName(self):
+        """ Formats the name of the RPM package"""
+        return "%s-%s-%s.rpm" %( self.name, self.version, self.release)
+
+    def url(self):
+        """ Returns the URL to download the file """
+        return self.repository.repourl + "/" + self.location
 
     #
     # Methods for pretty display
@@ -266,12 +280,17 @@ class Package(VersionedObject):
                 tmpstr += "\t%s-%s-%s\t%s\n" % (p.name, p.version, p.release, p.flags)
         return tmpstr
 
-
     #
     # Dependency management
     ###########################################################################
-    def getDependencies(self):
+    def getPackagesRequired(self):
+        """ Get allpackages needed for installation (including the package itself)"""
+        deps = self.getDependencies()
+        deps.append(self)
+        return deps
 
+    def getDependencies(self):
+        """ Get all dependencies for the package (excluding the package itself)"""
         log.info("Checking dependencies for %s.%s-%s" % (self.name, self.version, self.release))
         return self._getpackageDeps()
 
@@ -300,14 +319,15 @@ class Package(VersionedObject):
 ###############################################################################
 class Repository(object):
     """ Class representing a yum repository with all associated metadata"""
-    def __init__(self):
+    def __init__(self, url):
         self.mPackages = {}
         self.mProvides = {}
         self.mPackageCount = 0
         # These are hardwired dependencies in RPM.
         # we do not need to care about them...
         self.mIgnoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
-
+        # URL of the Yum repository
+        self.repourl = url
     #
     # Method to load a primary.xml.gz YUM repository file
     ###########################################################################
@@ -439,18 +459,25 @@ class Repository(object):
 ###############################################################################
 class LbYumClient(object):
 
-    def getPackage(self, name, version=None, release=None):
-        """ Main method for locating packages """
+    def getRPMPackage(self, name, version=None, release=None):
+        """ Main method for locating packages by RPM name"""
         return self.repository.findPackageByName(name, version, release)
 
-    def createConfig(self, remoteRepoURL):
+    def getLHCbPackage(self, name, version=None, config=None, release=None):
+        """ Locate packages using LHCb/install_project parameters"""
+        return [ self.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0", "1") ]
+
+    def listRPMPackages(self, nameRegexp=None, versionRegexp=None, releaseRegexp=None):
+        """ List pakages available"""
+
+    def createConfig(self, remoteRepoURL, overwrite=False):
         log.debug("Creating the config file with repository: %s" % remoteRepoURL)
 
         if not os.path.exists(self.etcdir):
             os.makedirs(self.etcdir)
         if not os.path.exists(self.lbyumcache):
             os.makedirs(self.lbyumcache)
-        if not os.path.exists(self.lbyumconf):
+        if not os.path.exists(self.lbyumconf) or overwrite:
             ycf = open(self.lbyumconf, 'w')
             ycf.write("repourl=%s" % remoteRepoURL)
             ycf.close()
@@ -458,28 +485,35 @@ class LbYumClient(object):
             raise Exception("Config file already exists")
 
     def loadConfig(self):
-        log.debug("Loading the config for repository")
-        if not os.path.exists(self.lbyumconf):
-            raise Exception("Could not find configuration file")
+        """ Look up the location of the yum repository """
+
+        log.debug("Loading the config from repository")
+        configFile = None
+        if os.path.exists(self.lbyumconf):
+            configFile = self.lbyumconf
+        elif os.path.exists(self.yumconf):
+            configFile = self.yumconf
         else:
-            ycf = open(self.lbyumconf, 'r')
-            for l in ycf.readlines():
-                m = re.match("repourl=\s*(.*)\s*$", l)
-                if m != None:
-                    self.repourl = m.group(1)
-                    break
-            ycf.close()
+            raise Exception("Could not find configuration file")
+
+        log.debug("Using Config file: %s" % configFile)
+        ycf = open(configFile, 'r')
+        for l in ycf.readlines():
+            m = re.match("repourl=\s*(.*)\s*$", l)
+            if m != None:
+                self.repourl = m.group(1)
+                break
+        ycf.close()
+        self.configured = True
+
+        log.debug("Found repository URL: %s" % self.repourl)
         return self.repourl
 
-    def hasConfig(self):
-        return os.path.exists(self.lbyumconf)
-
-
-    def getLatestPrimary(self):
+    def _getLatestPrimary(self):
         log.debug("Downloading latest version of primary.xml.gz")
         urllib.urlretrieve (self.primaryurl, self.localPrimaryXml)
 
-    def checkRepoUpdates(self):
+    def _checkRepoUpdates(self):
         """ Checks whether the primary.xml.gz needs updating.
         For that purpose, we need to download and parse the
         file called repomd.xml """
@@ -495,13 +529,13 @@ class LbYumClient(object):
         response.close()
 
         # Now parsing to get
-        (rchecksum, rtimestamp) = self.checkRepoMD(data)
+        (rchecksum, rtimestamp) = self._checkRepoMD(data)
 
         # Checking if we have a repomd file at all
         (lchecksum, ltimestamp) = (None, None)
         if os.path.exists(self.localRepomdXml):
             ftmp = open(self.localRepomdXml, 'r')
-            (lchecksum, ltimestamp) = self.checkRepoMD( ftmp.read())
+            (lchecksum, ltimestamp) = self._checkRepoMD( ftmp.read())
             ftmp.close()
 
         # Now checking if we have a
@@ -515,14 +549,14 @@ class LbYumClient(object):
         log.debug("Checking repo metadata for updates returned %s" % needUpdate)
         return needUpdate
 
-    def checkRepoMD(self, repomdxml):
+    def _checkRepoMD(self, repomdxml, dbtype="primary"):
         """ Method to parse the Repository metadata XML file """
         checksum = None
         timestamp = None
         dom = xml.dom.minidom.parseString(repomdxml)
         for n in dom.documentElement.childNodes:
             if n.nodeType == xml.dom.Node.ELEMENT_NODE and n.tagName=="data":
-                if n.getAttribute("type") == "primary":
+                if n.getAttribute("type") == dbtype:
                     for nc in n.childNodes:
                         if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
                             checksum = Package._getNodeText(nc)
@@ -536,13 +570,9 @@ class LbYumClient(object):
         self.localConfigRoot = localConfigRoot
         self.etcdir = os.path.join(localConfigRoot, SETC)
         self.lbyumcache = os.path.join(localConfigRoot, SVAR, SCACHE, SLBYUM)
-        self.lbyumconf = os.path.join(localConfigRoot, SETC, SLBYUMCONF)
+        self.lbyumconf = os.path.join(self.etcdir, SLBYUMCONF)
+        self.yumconf = os.path.join(self.etcdir, "yum.repos.d", "lhcb.repo")
         self.configured = False
-
-        # Check whether we have a configuration before continuing
-        if not self.hasConfig():
-            log.warning("LbYum not configured in directory: %s" %  localConfigRoot)
-            return
 
         # Loading the config and setting URLs accordingly
         self.loadConfig()
@@ -552,8 +582,8 @@ class LbYumClient(object):
         self.localRepomdXml = os.path.join(self.lbyumcache, "repomd.xml")
         self.localPickledRepo = os.path.join(self.lbyumcache, "repo.data")
 
-        if checkForUpdates and self.checkRepoUpdates():
-            self.getLatestPrimary()
+        if checkForUpdates and self._checkRepoUpdates():
+            self._getLatestPrimary()
             if os.path.exists(self.localPickledRepo):
                 os.unlink(self.localPickledRepo)
 
@@ -566,7 +596,7 @@ class LbYumClient(object):
             log.debug("Loaded the pickled repository")
         else:
             log.debug("Loading the XML repository")
-            self.repository = Repository()
+            self.repository = Repository(self.repourl)
             self.repository.loadYumMetadataFile(self.localPrimaryXml)
             if usePickledDB:
                 log.debug("Pickling the repository")
@@ -578,38 +608,31 @@ if __name__ == '__main__':
     FORMAT = '%(asctime)-15s %(message)s'
     logging.basicConfig(format=FORMAT)
     log.setLevel(logging.DEBUG)
-    #client = LbYumClient("/scratch/rpmsiteroot")
 
-    mysiteroot = "/home/lben/lbyumtest"
-    client = LbYumClient(mysiteroot)
-    if not os.path.exists(os.path.join(mysiteroot, SETC, SLBYUMCONF)):
-        client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
-        client = LbYumClient(mysiteroot)
+    #client = LbYumClient(mysiteroot)
+    #if not os.path.exists(os.path.join(mysiteroot, SETC, SLBYUMCONF)):
+    #    client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
+    #    client = LbYumClient(mysiteroot)
 
+    client = LbYumClient("/scratch/rpmsiteroot")
     #client.createConfig("https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/")
-    #r = client.repository
-    #for p in r.mProvides.keys():
-    #    l = r.mProvides[p]
-    #    if len(l) > 1:
-    #        print len(l), p
-    #        for pa in sorted(l):
-    #            print "%s.%s-%s" % (pa.name, pa.version, pa.release)
+    p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
+    print p
+    alldeps = p.getDependencies()
+    for dep in alldeps:
+        #print "Need: %s %s" % (dep.name, dep.version)
+        print "Need: %s" % (dep.url())
 
-
-    #p = client.getPackage("DAVINCI_v30r2p3_x86_64_slc5_gcc46_opt", "1.0.0")
-    #alldeps = p.getDependencies()
-    #for dep in alldeps:
-    #    print "Need: %s %s" % (dep.name, dep.version)
-    print "There are %d packages in repository" % client.repository.mPackageCount
-    reqCount = 0
-    provCount = 0
-    for plist in client.repository.mPackages.values():
-        for p in plist:
-            reqCount += len(p.requires)
-            provCount += len(p.provides)
-    print "There are %d requires" % reqCount
-    print "There are %d provides" % provCount            
-    p = client.getPackage("castor-devel", "2.1.9")
+    #print "There are %d packages in repository" % client.repository.mPackageCount
+    #reqCount = 0
+    #provCount = 0
+    #for plist in client.repository.mPackages.values():
+    #    for p in plist:
+    #        reqCount += len(p.requires)
+    #        provCount += len(p.provides)
+    #print "There are %d requires" % reqCount
+    #print "There are %d provides" % provCount
+    #p = client.getPackage("castor-devel", "2.1.9")
     #alldeps = p.getDependencies()
     #for dep in alldeps:
     #    print "Need: %s %s" % (dep.name, dep.version)
