@@ -382,11 +382,6 @@ class InstallArea(object):
             ret = True
         return ret
 
-    def _checkupdate(self):
-        """ Check if updates are available using yum check-update"""
-        self.log.warning("Update not implemented")
-
-
     def _findpackage(self, name, version, cmtconfig):
         """ Find all the packages matching a triplet name, version, config """
         # TODO: Implement according to LHCb package naming conventions... XXX
@@ -476,6 +471,33 @@ class InstallArea(object):
         if rc == 0:
             installed = True
         return installed
+
+
+    def _listInstalledPackages(self):
+        """ Checks whether a given RPM apckage is already installed """
+        rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-qa',  '--queryformat',  '%{NAME} %{VERSION} %{RELEASE}\n'  ]
+        self.log.debug("RPM command:" + " ".join(rpmcmd))
+
+        # Shold be improved to yield line per line instead of reading it all in block
+        pc = subprocess.Popen(rpmcmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out, err = pc.communicate()
+        rc = pc.returncode
+
+        if rc != 0:
+            raise LbInstallException("Error reading the list of packages from RPM DB")
+
+        return [ l.split(" ") for l in out.splitlines() ]
+
+    def _checkupdate(self):
+        """ Check whether packages could be updated in the repository """
+        from DependencyManager import Requires
+        for l in self._listInstalledPackages():
+            (name, version, release) = l
+            # Creating a RPM requirement and checking whether we have a match...
+            r = Requires(name, version, release, None, "GT", None)
+            update = self.lbYumClient.findPackageMatchingRequire(r)
+            if update != None:
+                self.log.warning("%s.%s-%s could be updated to %s" % (name, version, release, update.rpmName()))
 
     # Methods to download/install RPMs (replacement for yum install)
     ##########################################################################

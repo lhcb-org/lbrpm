@@ -5,6 +5,12 @@ DependencyManager
 Parsing of YUM metadata files to retrieve the available packages
 and their dependencies.
 
+for example to list all versions of BRUNEL in the repository:
+
+  client = LbYumClient(os.environ['MYSITEROOT'])
+  for p in client.listRPMPackages("BRUNEL.*"):
+        print "%s - %s" % (p.name, p.version)
+
 Created on Jun 29, 2012
 @author: Ben Couturier
 '''
@@ -443,11 +449,10 @@ class RepositoryXML(object):
                         log.debug("Found %d version matching - returning latest: %s" % (len(matching),matching[-1] ))
                         package = matching[-1].package
         except KeyError:
-            log.error("Could not find package providing %s-%s" % (requirement.name, requirement.version))
+            log.debug("Could not find package providing %s-%s" % (requirement.name, requirement.version))
 
         if package == None:
-            log.error("Could not find package providing %s-%s" % (requirement.name, requirement.version))
-
+            log.debug("Could not find package providing %s-%s" % (requirement.name, requirement.version))
         return package
 
 
@@ -481,6 +486,10 @@ class LbYumClient(object):
                     releasematch = False
                 if namematch and versionmatch and releasematch:
                     yield p
+
+    def findPackageMatchingRequire(self, requirement):
+        """ Main method for locating packages by RPM name"""
+        return self.repository.findPackageMatchingRequire(requirement)
 
     def createConfig(self, remoteRepoURL, overwrite=False):
         log.debug("Creating the config file with repository: %s" % remoteRepoURL)
