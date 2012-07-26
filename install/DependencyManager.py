@@ -171,75 +171,6 @@ class Requires(VersionedObject):
 class Package(VersionedObject):
 
     #
-    # Factory that parses the YUM XML and returns a configured package
-    ###########################################################################
-    @classmethod
-    def fromYumXML(cls, packageNode):
-        """ Method that instantiates a correct package instance, based on
-        the YUM Metadata XML structure"""
-
-        # First checking the node passed, just in case
-        if packageNode.nodeType == xml.dom.Node.ELEMENT_NODE and packageNode.tagName != "package":
-            raise Exception("Trying to create Package from wrong node" + str(packageNode))
-
-        p = Package()
-        for cn in packageNode.childNodes:
-            if cn.nodeType != xml.dom.Node.ELEMENT_NODE:
-                continue
-            if cn.tagName == "name":
-                p.name = Package._getNodeText(cn)
-            elif cn.tagName == "arch":
-                p.arch = Package._getNodeText(cn)
-            elif cn.tagName == "version":
-                p.version = cn.getAttribute("ver")
-                p.release = cn.getAttribute("rel")
-                p.epoch = cn.getAttribute("epoch")
-            elif cn.tagName == "location":
-                p.location = cn.getAttribute("href")
-            elif cn.tagName == "format":
-                for fnode in cn.childNodes:
-                    if fnode.nodeType != xml.dom.Node.ELEMENT_NODE:
-                        continue
-                    if fnode.tagName == "rpm:group":
-                        p.group =  Package._getNodeText(fnode)
-                    if fnode.tagName == "rpm:provides":
-                        for dep in fnode.childNodes:
-                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
-                                continue
-                            depname = dep.getAttribute("name")
-                            depver = dep.getAttribute("ver")
-                            deprel = dep.getAttribute("rel")
-                            depepoch = dep.getAttribute("epoch")
-                            depflags = dep.getAttribute("flags")
-                            #p.provides.append((depname, depver, deprel, depepoch, depflags))
-                            p.provides.append(Provides(depname, depver, deprel,
-                                                       depepoch, depflags, p))
-                    if fnode.tagName == "rpm:requires":
-                        for dep in fnode.childNodes:
-                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
-                                continue
-                            depname = dep.getAttribute("name")
-                            depver = dep.getAttribute("ver")
-                            deprel = dep.getAttribute("rel")
-                            depepoch = dep.getAttribute("epoch")
-                            depflags = dep.getAttribute("flags")
-                            deppre = dep.getAttribute("pre")
-                            #p.requires.append((depname, depver, deprel, depepoch, deppre))
-                            p.requires.append(Requires(depname, depver, deprel,
-                                                       depepoch, depflags, deppre))
-
-        # Set the "standard version field, used for comparison
-        p.standardVersion = VersionedObject.getStandardVersion(p.version)
-        # Now return the object back...
-        return p
-
-    @classmethod
-    def _getNodeText(cls, node):
-        """ Gets the value of the first child text node """
-        for t in node.childNodes:
-            if t.nodeType == xml.dom.Node.TEXT_NODE:
-                return t.data
-    #
     # Constructor and public method
     ###########################################################################
     def __init__(self):
@@ -323,18 +254,192 @@ class Package(VersionedObject):
 #
 # Package: Class representing a remote repository of RPM package
 ###############################################################################
-class RepositoryXML(object):
+class Repository(object):
     """ Class representing a yum repository with all associated metadata"""
-    def __init__(self, url):
+    def __init__(self, url, repocachedir):
+        # These are hardwired dependencies in RPM.
+        # we do not need to care about them...
+        self.ignoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
+
+        # URL of the Yum repository and associated files
+        self.repourl = url
+        self.repomdurl = self.repourl + "/repodata/repomd.xml"
+        self.primaryurl = self.repourl + "/repodata/primary.xml.gz"
+
+        # Cache directory and file names
+        self.cachedir = repocachedir
+        self.localPrimaryXml = os.path.join(repocachedir, "primary.xml.gz")
+        self.localRepomdXml = os.path.join(repocachedir, "repomd.xml")
+
+        # Now initializing the backend
+        self.backend = RepositoryXMLBackend(self.localPrimaryXml, self.ignoredPackages)
+
+
+    # Tools to get the metadat and check whether it is up to date
+    ###########################################################################
+    def _getLatestPrimary(self):
+        log.debug("Downloading latest version of primary.xml.gz")
+        urllib.urlretrieve (self.primaryurl, self.localPrimaryXml)
+
+    def _checkRepoUpdates(self):
+        """ Checks whether the primary.xml.gz needs updating.
+        For that purpose, we need to download and parse the
+        file called repomd.xml """
+        log.debug("Checking repo metadata for updates")
+
+        if not os.path.exists(self.localPrimaryXml):
+            return True
+
+        # First getting the file content
+        import urllib2
+        response = urllib2.urlopen(self.repomdurl)
+        data = response.read()
+        response.close()
+
+        # Now parsing to get
+        (rchecksum, rtimestamp) = self._checkRepoMD(data)
+
+        # Checking if we have a repomd file at all
+        (lchecksum, ltimestamp) = (None, None)
+        if os.path.exists(self.localRepomdXml):
+            ftmp = open(self.localRepomdXml, 'r')
+            (lchecksum, ltimestamp) = self._checkRepoMD( ftmp.read())
+            ftmp.close()
+
+        # Now checking if we have a
+        needUpdate = False
+        if (lchecksum != rchecksum) or  (ltimestamp != rtimestamp):
+            needUpdate = True
+            ftmp =  open(self.localRepomdXml, 'w')
+            ftmp.write(data)
+            ftmp.close()
+
+        log.debug("Checking repo metadata for updates returned %s" % needUpdate)
+        return needUpdate
+
+    def _checkRepoMD(self, repomdxml, dbtype="primary"):
+        """ Method to parse the Repository metadata XML file """
+        checksum = None
+        timestamp = None
+        dom = xml.dom.minidom.parseString(repomdxml)
+        for n in dom.documentElement.childNodes:
+            if n.nodeType == xml.dom.Node.ELEMENT_NODE and n.tagName=="data":
+                if n.getAttribute("type") == dbtype:
+                    for nc in n.childNodes:
+                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
+                            checksum = RepositoryXMLBackend._getNodeText(nc)
+                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="timestamp":
+                            timestamp = RepositoryXMLBackend._getNodeText(nc)
+        return (checksum, timestamp)
+
+
+    #
+    # Methods implemented in the backend
+    ###########################################################################
+    def load(self):
+        """ Loads required data into memory """
+        self.backend.load()
+
+
+    def findPackageByName(self, name, version, release=None):
+        """ Utility function to locate a package by name """
+        return self.backend.findPackageByName(name, version, release)
+
+    def findPackageMatchingRequire(self, requirement):
+        """ Utility function to locate a package providing a given functionality """
+        return self.backend.findPackageMatchingRequire(requirement)
+
+
+    def getAllPackages(self, nameMatch=None):
+        """ Yields the list of all packages known by the repository """
+        return self.backend.getAllPackages(nameMatch)
+
+
+class RepositoryXMLBackend(object):
+    """ Class interfacing with the XML interface provided by Yum repositories """
+
+    #
+    # Factory that parses the YUM XML and returns a configured package
+    ###########################################################################
+    @classmethod
+    def fromYumXML(cls, packageNode):
+        """ Method that instantiates a correct package instance, based on
+        the YUM Metadata XML structure"""
+
+        # First checking the node passed, just in case
+        if packageNode.nodeType == xml.dom.Node.ELEMENT_NODE and packageNode.tagName != "package":
+            raise Exception("Trying to create Package from wrong node" + str(packageNode))
+
+        p = Package()
+        for cn in packageNode.childNodes:
+            if cn.nodeType != xml.dom.Node.ELEMENT_NODE:
+                continue
+            if cn.tagName == "name":
+                p.name = RepositoryXMLBackend._getNodeText(cn)
+            elif cn.tagName == "arch":
+                p.arch = RepositoryXMLBackend._getNodeText(cn)
+            elif cn.tagName == "version":
+                p.version = cn.getAttribute("ver")
+                p.release = cn.getAttribute("rel")
+                p.epoch = cn.getAttribute("epoch")
+            elif cn.tagName == "location":
+                p.location = cn.getAttribute("href")
+            elif cn.tagName == "format":
+                for fnode in cn.childNodes:
+                    if fnode.nodeType != xml.dom.Node.ELEMENT_NODE:
+                        continue
+                    if fnode.tagName == "rpm:group":
+                        p.group =  RepositoryXMLBackend._getNodeText(fnode)
+                    if fnode.tagName == "rpm:provides":
+                        for dep in fnode.childNodes:
+                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
+                                continue
+                            depname = dep.getAttribute("name")
+                            depver = dep.getAttribute("ver")
+                            deprel = dep.getAttribute("rel")
+                            depepoch = dep.getAttribute("epoch")
+                            depflags = dep.getAttribute("flags")
+                            #p.provides.append((depname, depver, deprel, depepoch, depflags))
+                            p.provides.append(Provides(depname, depver, deprel,
+                                                       depepoch, depflags, p))
+                    if fnode.tagName == "rpm:requires":
+                        for dep in fnode.childNodes:
+                            if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
+                                continue
+                            depname = dep.getAttribute("name")
+                            depver = dep.getAttribute("ver")
+                            deprel = dep.getAttribute("rel")
+                            depepoch = dep.getAttribute("epoch")
+                            depflags = dep.getAttribute("flags")
+                            deppre = dep.getAttribute("pre")
+                            #p.requires.append((depname, depver, deprel, depepoch, deppre))
+                            p.requires.append(Requires(depname, depver, deprel,
+                                                       depepoch, depflags, deppre))
+
+        # Set the "standard version field, used for comparison
+        p.standardVersion = VersionedObject.getStandardVersion(p.version)
+        # Now return the object back...
+        return p
+
+    @classmethod
+    def _getNodeText(cls, node):
+        """ Gets the value of the first child text node """
+        for t in node.childNodes:
+            if t.nodeType == xml.dom.Node.TEXT_NODE:
+                return t.data
+
+    def __init__(self, primaryfile, ignoredPackages):
         self.mPackages = {}
         self.mProvides = {}
         self.mPackageCount = 0
-        # These are hardwired dependencies in RPM.
-        # we do not need to care about them...
-        self.mIgnoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
-        # URL of the Yum repository
-        self.repourl = url
-    #
+        self.mPrimary = primaryfile
+        self.mIgnoredPackages = ignoredPackages
+
+
+    def load(self):
+        """ Actually load the data """
+        self.loadYumMetadataFile(self.mPrimary)
+
     # Method to load a primary.xml.gz YUM repository file
     ###########################################################################
     def loadYumMetadataFile(self, filename):
@@ -360,7 +465,7 @@ class RepositoryXML(object):
         for n in dom.documentElement.childNodes:
             if n.nodeType == xml.dom.Node.ELEMENT_NODE:
                 # Generating the package object from the XML
-                p = Package.fromYumXML(n)
+                p = RepositoryXMLBackend.fromYumXML(n)
                 p.setRepository(self)
                 # Adding the package to the repository
                 self._addPackage(p)
@@ -463,6 +568,7 @@ class RepositoryXML(object):
                 for p in self.mPackages[pak_list_k]:
                     yield p
 
+
 #
 # Package: Class representing a remote repository of RPM package
 ###############################################################################
@@ -491,105 +597,42 @@ class LbYumClient(object):
         """ Main method for locating packages by RPM name"""
         return self.repository.findPackageMatchingRequire(requirement)
 
-    def createConfig(self, remoteRepoURL, overwrite=False):
-        log.debug("Creating the config file with repository: %s" % remoteRepoURL)
-
-        if not os.path.exists(self.etcdir):
-            os.makedirs(self.etcdir)
-        if not os.path.exists(self.lbyumcache):
-            os.makedirs(self.lbyumcache)
-        if not os.path.exists(self.lbyumconf) or overwrite:
-            ycf = open(self.lbyumconf, 'w')
-            ycf.write("baseurl=%s" % remoteRepoURL)
-            ycf.close()
-        else:
-            raise Exception("Config file already exists")
-
     def loadConfig(self):
         """ Look up the location of the yum repository """
+        log.debug("Loading the configs from repository: %s" % self.yumreposdir)
 
-        log.debug("Loading the config from repository")
-        configFile = None
-        if os.path.exists(self.lbyumconf):
-            configFile = self.lbyumconf
-        elif os.path.exists(self.yumconf):
-            configFile = self.yumconf
-        else:
-            raise Exception("Could not find configuration file")
-
-        self.repourl= None
-        log.debug("Using Config file: %s" % configFile)
-        ycf = open(configFile, 'r')
-        for l in ycf.readlines():
-            m = re.match("baseurl=\s*(.*)\s*$", l)
+        self.repourls = {}
+        for f in os.listdir(self.yumreposdir):
+            # Checking that we have a file indeed
+            log.debug("Checkin config file: %s" % f)
+            m = re.match("(.*)\.repo", f)
             if m != None:
-                self.repourl = m.group(1)
-                break
-        ycf.close()
+                reponame = m.group(1)
+                repourl = None
+                log.debug("Opening config file for repo: %s" % reponame)
+                ycf = open(os.path.join(self.yumreposdir, f), 'r')
+                for l in ycf.readlines():
+                    m = re.match("baseurl=\s*(.*)\s*$", l)
+                    if m != None:
+                        repourl = m.group(1)
+                        break
+                ycf.close()
+                if repourl == None:
+                    log.warning("Could not read repository URL from %s" % f)
+                else:
+                    log.info("Found repository %s URL: %s" % (reponame, repourl))
+                    self.repourls[reponame] = repourl
+
+
         self.configured = True
+        if len(self.repourls.keys())==None:
+            raise Exception("Could not find repository config in %s" % self.yumreposdir)
 
-        if self.repourl==None:
-            raise Exception("Could not find repository base URL in %s" % configFile)
+        return self.repourls
 
-        log.debug("Found repository URL: %s" % self.repourl)
-        return self.repourl
 
-    def _getLatestPrimary(self):
-        log.debug("Downloading latest version of primary.xml.gz")
-        urllib.urlretrieve (self.primaryurl, self.localPrimaryXml)
 
-    def _checkRepoUpdates(self):
-        """ Checks whether the primary.xml.gz needs updating.
-        For that purpose, we need to download and parse the
-        file called repomd.xml """
-        log.debug("Checking repo metadata for updates")
-
-        if not os.path.exists(self.localPrimaryXml):
-            return True
-
-        # First getting the file content
-        import urllib2
-        response = urllib2.urlopen(self.repomdurl)
-        data = response.read()
-        response.close()
-
-        # Now parsing to get
-        (rchecksum, rtimestamp) = self._checkRepoMD(data)
-
-        # Checking if we have a repomd file at all
-        (lchecksum, ltimestamp) = (None, None)
-        if os.path.exists(self.localRepomdXml):
-            ftmp = open(self.localRepomdXml, 'r')
-            (lchecksum, ltimestamp) = self._checkRepoMD( ftmp.read())
-            ftmp.close()
-
-        # Now checking if we have a
-        needUpdate = False
-        if (lchecksum != rchecksum) or  (ltimestamp != rtimestamp):
-            needUpdate = True
-            ftmp =  open(self.localRepomdXml, 'w')
-            ftmp.write(data)
-            ftmp.close()
-
-        log.debug("Checking repo metadata for updates returned %s" % needUpdate)
-        return needUpdate
-
-    def _checkRepoMD(self, repomdxml, dbtype="primary"):
-        """ Method to parse the Repository metadata XML file """
-        checksum = None
-        timestamp = None
-        dom = xml.dom.minidom.parseString(repomdxml)
-        for n in dom.documentElement.childNodes:
-            if n.nodeType == xml.dom.Node.ELEMENT_NODE and n.tagName=="data":
-                if n.getAttribute("type") == dbtype:
-                    for nc in n.childNodes:
-                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
-                            checksum = Package._getNodeText(nc)
-                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="timestamp":
-                            timestamp = Package._getNodeText(nc)
-        return (checksum, timestamp)
-
-    def __init__(self, localConfigRoot, checkForUpdates=True, usePickledDB=False):
+    def __init__(self, localConfigRoot, checkForUpdates=True):
         """ Constructor for the client """
         # Setting up the variables
         self.localConfigRoot = localConfigRoot
@@ -599,39 +642,39 @@ class LbYumClient(object):
         self.lbyumcache = os.path.join(localConfigRoot, SVAR, SCACHE, SLBYUM)
         if not os.path.exists(self.lbyumcache):
             os.makedirs(self.lbyumcache)
-        self.lbyumconf = os.path.join(self.etcdir, SLBYUMCONF)
-        self.yumconf = os.path.join(self.etcdir, "yum.repos.d", "lhcb.repo")
+        self.yumconf = os.path.join(self.etcdir, "yum.conf")
+        self.yumreposdir = os.path.join(self.etcdir, "yum.repos.d")
         self.configured = False
 
         # Loading the config and setting URLs accordingly
         self.loadConfig()
-        self.repomdurl = self.repourl + "/repodata/repomd.xml"
-        self.primaryurl = self.repourl + "/repodata/primary.xml.gz"
-        self.localPrimaryXml = os.path.join(self.lbyumcache, "primary.xml.gz")
-        self.localRepomdXml = os.path.join(self.lbyumcache, "repomd.xml")
-        self.localPickledRepo = os.path.join(self.lbyumcache, "repo.data")
+        # At this point self.repourls is a map containing the list of repositories and their URLs
 
-        if checkForUpdates and self._checkRepoUpdates():
-            self._getLatestPrimary()
-            if os.path.exists(self.localPickledRepo):
-                os.unlink(self.localPickledRepo)
+        self.repositories = {}
+        for repo in self.repourls.keys():
+            # Getting the main parameters for the repository:
+            # URL and cache directory
+            repourl = self.repourls[repo]
+            repocachedir = os.path.join(self.lbyumcache, repo)
+            if not os.path.exists(repocachedir):
+                os.makedirs(repocachedir)
 
-        # Creating the repository, and loading the XML
-        if usePickledDB  and os.path.exists(self.localPickledRepo):
-            log.debug("Loading the pickled repository")
-            pr = open(self.localPickledRepo, "r" )
-            self.repository = pickle.load(pr)
-            pr.close()
-            log.debug("Loaded the pickled repository")
-        else:
+
+            r = Repository(repourl, repocachedir)
+            if checkForUpdates and r._checkRepoUpdates():
+                r._getLatestPrimary()
+
+            # Creating the repository, and loading the XML
             log.debug("Loading the XML repository")
-            self.repository = RepositoryXML(self.repourl)
-            self.repository.loadYumMetadataFile(self.localPrimaryXml)
-            if usePickledDB:
-                log.debug("Pickling the repository")
-                pr = open(self.localPickledRepo, "wb" )
-                pickle.dump(self.repository, pr)
-                pr.close()
+            r.load()
+
+            # Now adding the repository to the map
+            self.repositories[repo] = r
+
+        # For compatibility for the moment
+        # XXX
+        self.repository = self.repositories['lhcb']
+
 
 if __name__ == '__main__':
     FORMAT = '%(asctime)-15s %(message)s'
