@@ -254,9 +254,10 @@ class Package(VersionedObject):
 #
 # Package: Class representing a remote repository of RPM package
 ###############################################################################
+
 class Repository(object):
     """ Class representing a yum repository with all associated metadata"""
-    def __init__(self, url, repocachedir):
+    def __init__(self, name, url, repocachedir, backendList):
         # These are hardwired dependencies in RPM.
         # we do not need to care about them...
         self.ignoredPackages = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
@@ -264,73 +265,117 @@ class Repository(object):
         # URL of the Yum repository and associated files
         self.repourl = url
         self.repomdurl = self.repourl + "/repodata/repomd.xml"
-        self.primaryurl = self.repourl + "/repodata/primary.xml.gz"
+        self.localRepomdXml = os.path.join(repocachedir, "repomd.xml")
 
         # Cache directory and file names
         self.cachedir = repocachedir
-        self.localPrimaryXml = os.path.join(repocachedir, "primary.xml.gz")
-        self.localRepomdXml = os.path.join(repocachedir, "repomd.xml")
-
+        if not os.path.exists(self.cachedir):
+            os.makedirs(self.cachedir)
+ 
         # Now initializing the backend
-        self.backend = RepositoryXMLBackend(self.localPrimaryXml, self.ignoredPackages)
+        #self.backend = RepositoryXMLBackend(self.repocachedir, self.ignoredPackages)
+        self.availableBackends = backendList
+        self.backend = None
+        
+        self.setupBackend()
 
-
-    # Tools to get the metadat and check whether it is up to date
+    # Tools to get the metadata and check whether it is up to date
     ###########################################################################
-    def _getLatestPrimary(self):
+    def setupBackend(self):
+        """ Checks which back-end should be used, and update DB files. """
+        
+        # first get repository metadata with the list of available files
+        (data, remotemd) = self._getRemoteMetadata()
+        localmd  = self._getLocalMetadata()
+        
+        backend = None
+        for b in self.availableBackends:
+            log.info("Checking availability of interface: %s" % b)
+            try:
+                (checksum, timestamp, filename) = remotemd[b.yumDataType()]
+                # A priori we have a match (KeyError otherwise)
+                backend = b(self.repourl, self.cachedir, self.ignoredPackages)
+                self.backend = backend
+                ltimestamp = None
+                try:
+                    (lchecksum, ltimestamp, lfilename) =  localmd[b.yumDataType()]
+                except:
+                    pass
+                    # Doesn't matter, we download DB in this case
+                    
+                if ltimestamp == None or int(timestamp) > int(ltimestamp):
+                    # We need to update the DB in this case
+                    furl = self.repourl + "/" + filename
+                    fname = backend.getDBFileName()
+                    log.info("Copying %s to %s" % (furl, fname))
+                    self._getLatestDB(furl, fname)
+                    # Now saving the metadata to the repomd file
+                    ftmp = open(self.localRepomdXml, 'w')
+                    ftmp.write(data)
+                    ftmp.close()
+                    
+            except KeyError:
+                log.info("Remote repository does not provide %s DB" % b)
+            if backend != None:
+                break
+            
+        # Now loading the data
+        self.backend.load()
+ 
+    def _getLatestDB(self, url, filename):
         log.debug("Downloading latest version of primary.xml.gz")
-        urllib.urlretrieve (self.primaryurl, self.localPrimaryXml)
+        urllib.urlretrieve (url, filename)
 
-    def _checkRepoUpdates(self):
-        """ Checks whether the primary.xml.gz needs updating.
-        For that purpose, we need to download and parse the
-        file called repomd.xml """
-        log.debug("Checking repo metadata for updates")
-
-        if not os.path.exists(self.localPrimaryXml):
-            return True
+    def _getRemoteMetadata(self):
+        """ Gets the remote repomd file """
+        log.debug("Getting remote metadata")
 
         # First getting the file content
         import urllib2
+        ret = None
         response = urllib2.urlopen(self.repomdurl)
         data = response.read()
+        if data != None:
+            ret = self._checkRepoMD(data) 
         response.close()
 
-        # Now parsing to get
-        (rchecksum, rtimestamp) = self._checkRepoMD(data)
+        return (data, ret)
+    
+    def _getLocalMetadata(self):
+        """ Gets the remote repomd file """
+        log.debug("Getting local metadata")
 
-        # Checking if we have a repomd file at all
-        (lchecksum, ltimestamp) = (None, None)
+        # reads the file and parse
+        ret = None
         if os.path.exists(self.localRepomdXml):
             ftmp = open(self.localRepomdXml, 'r')
-            (lchecksum, ltimestamp) = self._checkRepoMD( ftmp.read())
+            data = ftmp.read()
+            if data != None:
+                ret = self._checkRepoMD(data) 
             ftmp.close()
+        
+        return ret
 
-        # Now checking if we have a
-        needUpdate = False
-        if (lchecksum != rchecksum) or  (ltimestamp != rtimestamp):
-            needUpdate = True
-            ftmp =  open(self.localRepomdXml, 'w')
-            ftmp.write(data)
-            ftmp.close()
+    def _checkRepoMD(self, repomdxml):
 
-        log.debug("Checking repo metadata for updates returned %s" % needUpdate)
-        return needUpdate
-
-    def _checkRepoMD(self, repomdxml, dbtype="primary"):
         """ Method to parse the Repository metadata XML file """
-        checksum = None
-        timestamp = None
         dom = xml.dom.minidom.parseString(repomdxml)
+        dbTimestamps = {}
         for n in dom.documentElement.childNodes:
             if n.nodeType == xml.dom.Node.ELEMENT_NODE and n.tagName=="data":
-                if n.getAttribute("type") == dbtype:
-                    for nc in n.childNodes:
-                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
-                            checksum = RepositoryXMLBackend._getNodeText(nc)
-                        if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="timestamp":
-                            timestamp = RepositoryXMLBackend._getNodeText(nc)
-        return (checksum, timestamp)
+                checksum = None
+                timestamp = None
+                location = None
+                fileType = n.getAttribute("type")
+                for nc in n.childNodes:
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
+                        checksum = RepositoryXMLBackend._getNodeText(nc)
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="timestamp":
+                        timestamp = RepositoryXMLBackend._getNodeText(nc)
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="location":
+                        location = nc.getAttribute("href")
+                dbTimestamps[fileType] = (checksum, timestamp, location)
+        return dbTimestamps
 
 
     #
@@ -355,8 +400,34 @@ class Repository(object):
         return self.backend.getAllPackages(nameMatch)
 
 
+class RepositoryTestBackend(object):
+    """ Test repository class """
+
+    @classmethod
+    def yumDataType(cls):
+        """ Returns the ID for the data type as used in the repomd.xml file """
+        return "test"
+
+
 class RepositoryXMLBackend(object):
     """ Class interfacing with the XML interface provided by Yum repositories """
+
+    @classmethod
+    def yumDataType(cls):
+        """ Returns the ID for the data type as used in the repomd.xml file """
+        return "primary"
+
+    def __init__(self, url, cachedir, ignoredPackages):
+        self.mPackages = {}
+        self.mProvides = {}
+        self.mPackageCount = 0
+        self.mDBName = "primary.xml.gz"
+        self.mPrimary = os.path.join(cachedir, self.mDBName)
+        self.mIgnoredPackages = ignoredPackages
+
+    def getDBFileName(self):
+        """ return the full database name """
+        return self.mPrimary
 
     #
     # Factory that parses the YUM XML and returns a configured package
@@ -427,14 +498,6 @@ class RepositoryXMLBackend(object):
         for t in node.childNodes:
             if t.nodeType == xml.dom.Node.TEXT_NODE:
                 return t.data
-
-    def __init__(self, primaryfile, ignoredPackages):
-        self.mPackages = {}
-        self.mProvides = {}
-        self.mPackageCount = 0
-        self.mPrimary = primaryfile
-        self.mIgnoredPackages = ignoredPackages
-
 
     def load(self):
         """ Actually load the data """
@@ -660,13 +723,12 @@ class LbYumClient(object):
                 os.makedirs(repocachedir)
 
 
-            r = Repository(repourl, repocachedir)
-            if checkForUpdates and r._checkRepoUpdates():
-                r._getLatestPrimary()
+            r = Repository(repo, repourl, repocachedir, [ RepositoryTestBackend, RepositoryXMLBackend ])
+            #if checkForUpdates and r._checkRepoUpdates():
+            #    r._getLatestPrimary()
 
             # Creating the repository, and loading the XML
             log.debug("Loading the XML repository")
-            r.load()
 
             # Now adding the repository to the map
             self.repositories[repo] = r
@@ -686,7 +748,7 @@ if __name__ == '__main__':
     #    client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
     #    client = LbYumClient(mysiteroot)
 
-    client = LbYumClient("/scratch/rpmsiteroot")
+    client = LbYumClient("/opt/siteroot")
     #client.createConfig("https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/")
     for p in client.listRPMPackages("BRUNEL.*"):
         print "%s - %s" % (p.name, p.version)
