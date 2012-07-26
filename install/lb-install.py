@@ -399,8 +399,7 @@ class InstallArea(object):
         else:
             pnameVer = pname
         if cmtconfig != None:
-            cmtconfig.replace("-", "_")
-            pnameVerConfig = pnameVer + "_" + cmtconfig
+            pnameVerConfig = pnameVer + "_" + cmtconfig.replace("-", "_")
         else:
             pnameVerConfig = pnameVer
 
