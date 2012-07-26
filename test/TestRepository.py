@@ -4,13 +4,13 @@ Created on Jul 23, 2012
 '''
 import unittest
 import xml.dom.minidom
-from DependencyManager import Provides, Requires, Package, Repository
+from DependencyManager import Provides, Requires, Package, RepositoryXML
 
 class TestRepository(unittest.TestCase):
 
     def setUp(self):
         # The repository is leaded directly from the XML at the end of this file
-        self.repository = Repository()
+        self.repository = RepositoryXML("dummyUrl")
         dom = xml.dom.minidom.parseString(repoxml)
         self.repository.loadYumMetadataDOM(dom)
 
