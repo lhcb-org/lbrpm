@@ -16,7 +16,6 @@ import sys
 import time
 import traceback
 from string import Template
-from DependencyManager import LbYumClient
 
 __RCSID__ = "$Id$"
 
@@ -128,7 +127,7 @@ def parseArgs(config):
     arguments = sys.argv[1:]
 
     if not arguments :
-        raise LbInstallException("Not enough argument passed")
+        raise LbInstallException("Not enough arguments passed")
 
     try:
         opts, args = getopt.getopt(arguments, 'hdb',
@@ -193,7 +192,7 @@ class InstallArea(object):
 
         # Making sure the db is initialized
         self.dbpath = os.path.join(self.siteroot, SVAR, SLIB, SRPM)
-        self.initRPMDB()
+        self._initRPMDB()
 
         # Initializing yum config
         self.etc = os.path.join(self.siteroot, SETC)
@@ -201,10 +200,6 @@ class InstallArea(object):
         self.yumreposd = os.path.join(self.etc, "yum.repos.d")
         self.yumrepolhcb = os.path.join(self.yumreposd, "lhcb.repo")
 
-        # We keep config files compatible with YUM,
-        # even though we use the DependencyManager client
-        self.initYUM()
-        self.lbYumClient = LbYumClient(self.siteroot)
 
         # tmp directory
         self.tmpdir = os.path.join(self.siteroot, STMP)
@@ -218,19 +213,33 @@ class InstallArea(object):
         # Add the local bin to the path
         os.environ['PATH'] = os.pathsep.join([os.environ['PATH'], self.usrbin])
 
+        # Local lib directory
+        self.lib =  os.path.join(self.siteroot, SLIB)
+        if not os.path.exists(self.lib):
+            os.makedirs(self.lib)
+        # Add the local bin to the path
+        sys.path.append(self.lib)
+        self._getLbYum()
+       # We keep config files compatible with YUM,
+        # even though we use the DependencyManager client
+        self._initYUM()
+        from DependencyManager import LbYumClient
+        self.lbYumClient = LbYumClient(self.siteroot)
+
+
         # Defining structures and
         # Checking if all needed tools are available
         self.externalStatus = {}
         self.requiredExternals = [ 'rpm' ]
         self.externalFix = {}
-        self.checkPrerequisites()
+        self._checkPrerequisites()
 
         # And if all the software is there
         self.initfile = None
-        self.checkRepository()
+        self._checkRepository()
 
 
-    def initRPMDB(self):
+    def _initRPMDB(self):
         """ Initialize RPM database """
         log = self.log
         log.info("RPM DB in %s" % self.dbpath)
@@ -246,32 +255,32 @@ class InstallArea(object):
             log.debug(stdout)
             log.debug(stderr)
             if rc != 0:
-                raise Exception("Error initilializing RPM DB: %s" % stderr)
+                raise Exception("Error initializing RPM DB: %s" % stderr)
 
 
-    def initYUM(self):
-        """ Initializes yum DB """
+    def _initYUM(self):
+        """ Initializes yum configuration.
+        Still in use as LbYum uses a compatible configuration """
         if not os.path.exists(self.etc):
             os.makedirs(self.etc)
         if not os.path.exists(self.yumconf):
             ycf = open(self.yumconf, 'w')
-            ycf.write(getYumConf(self.siteroot))
+            ycf.write(_getYumConf(self.siteroot))
             ycf.close()
 
         if not os.path.exists(self.yumreposd):
             os.makedirs(self.yumreposd)
         if not os.path.exists(self.yumrepolhcb):
             yplf = open(self.yumrepolhcb, 'w')
-            yplf.write(getYumRepo(self.siteroot, self.rpmsurl))
+            yplf.write(_getYumRepo(self.siteroot, self.rpmsurl))
             yplf.close()
 
 
     def _getLbYum(self):
         """ Downloads the version of LbYum DependencyManager from the extras directory """
-
         depman = "DependencyManager.py"
         url = "/".join([ self.extrasurl, depman])
-        ydpath = os.path.join(self.usrbin, depman)
+        ydpath = os.path.join(self.lib, depman)
         self.log.info("Downloading %s to %s" % ( url, ydpath) )
         import urllib
         urllib.urlretrieve (url, ydpath)
@@ -279,7 +288,7 @@ class InstallArea(object):
 
 
 
-    def checkPrerequisites(self):
+    def _checkPrerequisites(self):
         """ Checks that external tools required by this tool to perform
         the installation """
 
@@ -311,7 +320,7 @@ class InstallArea(object):
         return externalMissing
 
 
-    def checkRepository(self):
+    def _checkRepository(self):
         """ Checks whether the repository was initialized """
         self.initfile = os.path.join(self.etc, "repoinit")
         if not os.path.exists(self.initfile):
@@ -322,7 +331,7 @@ class InstallArea(object):
         else:
             self._checkupdate()
 
-    # Pass through commands to RPM and yum
+    # Pass through commands to RPM and lbYum
     ##########################################################################
     def rpm(self, args):
         """ Wrapper for invocation of RPM """
@@ -345,6 +354,20 @@ class InstallArea(object):
         rc = callSimple(rpmcmd)
         return rc
 
+    def listpackages(self, args):
+        """ Wrapper for invocation of RPM """
+        nameRegexp = None
+        if len(args) > 0:
+            print args[0]
+            nameRegexp = args[0]
+
+        totalMatching = 0
+        for p in self.lbYumClient.listRPMPackages(nameRegexp):
+            self.log.info(p.rpmName())
+            totalMatching+=1
+        self.log.info("Total Matching: %d" % totalMatching)
+
+
     # Various utility methods to download/check RPMs
     ##########################################################################
     def _checkRpmFile(self, filename):
@@ -363,9 +386,35 @@ class InstallArea(object):
         """ Check if updates are available using yum check-update"""
         self.log.warning("Update not implemented")
 
+
     def _findpackage(self, name, version, cmtconfig):
         """ Find all the packages matching a triplet name, version, config """
-        return self.lbYumClient.getLHCbPackage(name, version, cmtconfig)
+        # TODO: Implement according to LHCb package naming conventions... XXX
+        foundPackages = []
+        pname = name.upper()
+        pnameVer = None
+        pnameVerConf = None
+        if version != None:
+            pnameVer = pname + "_" + version
+        else:
+            pnameVer = pname
+        if cmtconfig != None:
+            cmtconfig.replace("-", "_")
+            pnameVerConfig = pnameVer + "_" + cmtconfig
+        else:
+            pnameVerConfig = pnameVer
+
+        # Checking if the package uses standard naming...
+        allpackages = self.lbYumClient.listRPMPackages(pname + ".*")
+        fullmatch = [ p for p in allpackages if p.name == pnameVerConfig ]
+        if len(fullmatch) > 0:
+            # taking the last one...
+            foundPackages.append(sorted(fullmatch)[-1])
+        else:
+            # Trying to match the full package name...
+
+            raise Exception("Could not find package matching: %s %s %s" % (name, version, cmtconfig))
+        return foundPackages
 
     def _filterUrlsAlreadyInstalled(self, packages):
         """ Filter out RPMs already installed """
@@ -403,19 +452,25 @@ class InstallArea(object):
                 urllib.urlretrieve (p.url(), full_filename)
         return files
 
-    def _installfiles(self, files, rpmloc):
+    def _installfiles(self, files, rpmloc, forceInstall=False):
         """ Install some rpm files given the location of the RPM DB """
         fulllist = [ os.path.join(rpmloc, f) for f in files ]
-        args = [ "-ivh " ] + fulllist
+        args = [ "-ivh --oldpackage " ]
+        if forceInstall:
+            args.append("--force ")
+        args = args + fulllist
         rc = self.rpm(args)
         if rc != 0:
             raise Exception("Error installing rpms")
 
 
-    def _isRpmInstalled(self, rpmname):
+    def _isRpmInstalled(self, rpmname, rpmversion=None):
         """ Checks whether a given RPM apckage is already installed """
         installed = False
-        rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-q', rpmname ]
+        fullname = rpmname
+        if rpmversion != None:
+            fullname = rpmname + "." + rpmversion
+        rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-q', fullname  ]
         self.log.debug("RPM command:" + " ".join(rpmcmd))
         rc, stdout, stderr = call(" ".join(rpmcmd))
         self.log.debug("rpm -q out/err: %s / %s" % ( stdout, stderr))
@@ -429,6 +484,7 @@ class InstallArea(object):
         """ Perform the whole download/install procedure (equivalent to
         yum install """
         # Looking for the package
+        self.log.info("Installing %s/%s/%s" % (project, version, cmtconfig))
         rpmname = None
         matches = self._findpackage(project, version, cmtconfig)
         self.log.info("Found %d matches" % len(matches))
@@ -449,7 +505,15 @@ class InstallArea(object):
         else:
             self.installPackage(package)
 
-    def installPackage(self, package):
+    def installRpm(self, rpmname, version=None, forceInstall=False):
+        """ Install an RPM by name """
+        p = self.lbYumClient.getRPMPackage(rpmname, version)
+        if p == None:
+            raise Exception("Package %s/%s not found" % (rpmname, version))
+
+        self.installPackage(p, forceInstall)
+
+    def installPackage(self, package, forceInstall = False):
         """ install a specific RPM, checking if not installed already """
         self.log.info("Installing %s and dependencies" % package.rpmName())
 
@@ -468,12 +532,12 @@ class InstallArea(object):
         files = self._downloadfiles(finstalllist, self.tmpdir)
 
         # And installing
-        self._installfiles(files, self.tmpdir)
+        self._installfiles(files, self.tmpdir, forceInstall)
 
 
 # Generators for the YumConfigurations
 ##########################################################################
-def getYumConf(siteroot):
+def _getYumConf(siteroot):
     """ Builds the Yum configuration from template """
     cfile = Template("""
 [main]
@@ -493,7 +557,7 @@ reposdir=/etc/yum.repos.d
 """).substitute(siteroot=siteroot)
     return cfile
 
-def getYumRepo(siteroot, url):
+def _getYumRepo(siteroot, url):
     """ Builds the Yum repository configuration from template """
     cfile = Template("""
 [lhcb]
@@ -530,19 +594,6 @@ Pass through mode where the command is delegated to YUM (with the correct DB)
 """ % { "cmd" : cmd }
 
 
-# Buil RPM name from triplet project, version, cmtconfig
-###############################################################################
-def buildRPMName(project, version, cmtconfig):
-    """ Builds the name of the RPM file based on the install_project equivalent
-    parameters """
-
-    name = None
-    if cmtconfig == None:
-        name = project.upper() + "_" + version
-    else:
-        name = project.upper() + "_" + version + "_" + cmtconfig.replace("-", "_")
-    return name
-
 # Class for known install exceptions
 ###############################################################################
 class LbInstallException(Exception):
@@ -558,7 +609,7 @@ class LbInstallException(Exception):
 MODE_INSTALL = "install"
 MODE_INSTALLRPM = "installrpm"
 MODE_RPM     = "rpm"
-MODE_YUM     = "yum"
+MODE_LIST    = "list"
 
 # Constants for the dir names
 SVAR = "var"
@@ -573,25 +624,20 @@ SBIN = "bin"
 REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm/"
 
 def main():
-    """ Main method for the comamnd """
+    """ Main method for the command """
     rc = 0
     mode = MODE_INSTALL
     try:
         # Creating the config object
         config = LbInstallConfig()
 
-
         # Parsing first argument to check the mode
         args = sys.argv
-        yumusercommand = "yum"
         if len(args) > 1:
             if args[1].lower() == "rpm":
                 mode = MODE_RPM
-            elif args[1].lower().startswith("yum"):
-                # This mode allows passthough of yum util comands (like
-                # yumdownloader)
-                mode = MODE_YUM
-                yumusercommand = args[1]
+            elif args[1].lower()== "list":
+                mode = MODE_LIST
             elif args[1].lower() == "install":
                 mode = MODE_INSTALLRPM
 
@@ -601,16 +647,20 @@ def main():
             log = config.setLogger()
             installArea = InstallArea(config)
             rc = installArea.rpm(args[2:])
-        elif mode == MODE_YUM:
-            # Mode that passes the arguments to the local YUM
+        elif mode == MODE_LIST:
+            # Mode that list packages according to a regexp
             log = config.setLogger()
             installArea = InstallArea(config)
-            rc = installArea.yum(args[2:], yumusercommand)
+            rc = installArea.listpackages(args[2:])
         elif mode == MODE_INSTALLRPM:
             # Mode where the comamnds are installed by name
             log = config.setLogger()
             installArea = InstallArea(config)
-            rc = installArea.installRpm(args[2])
+            rpmname = args[2]
+            version = None
+            if len(args) > 3:
+                version = args[3]
+            rc = installArea.installRpm(rpmname, version)
         else:
             # In this case we are in normal install mode
             pname, pversion, binary = parseArgs(config)

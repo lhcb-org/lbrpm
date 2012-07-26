@@ -317,7 +317,7 @@ class Package(VersionedObject):
 #
 # Package: Class representing a remote repository of RPM package
 ###############################################################################
-class Repository(object):
+class RepositoryXML(object):
     """ Class representing a yum repository with all associated metadata"""
     def __init__(self, url):
         self.mPackages = {}
@@ -390,8 +390,9 @@ class Repository(object):
                 allprovides.append(prov)
                 self.mProvides[prov.name] = allprovides
 
+
     #
-    # Private methods to track needed packages
+    # Public method to look for packages
     ###########################################################################
     def findPackageByName(self, name, version, release=None):
         """ Utility function to locate a package by name """
@@ -417,10 +418,6 @@ class Repository(object):
             log.error("Could not find package %s.%s-%s" % (name, version, release))
 
         return package
-
-    #
-    # Public method to look for packages
-    ###########################################################################
 
     def findPackageMatchingRequire(self, requirement):
         """ Utility function to locate a package providing a given functionality """
@@ -454,6 +451,13 @@ class Repository(object):
         return package
 
 
+    def getAllPackages(self, nameMatch=None):
+        """ Yields the list of all packages known by the repository """
+        for pak_list_k in self.mPackages.keys():
+            if nameMatch == None or (nameMatch != None and re.match(nameMatch, pak_list_k) != None):
+                for p in self.mPackages[pak_list_k]:
+                    yield p
+
 #
 # Package: Class representing a remote repository of RPM package
 ###############################################################################
@@ -463,12 +467,20 @@ class LbYumClient(object):
         """ Main method for locating packages by RPM name"""
         return self.repository.findPackageByName(name, version, release)
 
-    def getLHCbPackage(self, name, version=None, config=None, release=None):
-        """ Locate packages using LHCb/install_project parameters"""
-        return [ self.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0", "1") ]
-
     def listRPMPackages(self, nameRegexp=None, versionRegexp=None, releaseRegexp=None):
-        """ List pakages available"""
+        """ List packages available"""
+        for p in self.repository.getAllPackages():
+                namematch = True
+                versionmatch = True
+                releasematch = True
+                if nameRegexp != None and re.match(nameRegexp, p.name) == None:
+                    namematch = False
+                if versionRegexp != None and re.match(versionRegexp, p.name) == None:
+                    versionmatch = False
+                if releaseRegexp != None and re.match(releaseRegexp, p.name) == None:
+                    releasematch = False
+                if namematch and versionmatch and releasematch:
+                    yield p
 
     def createConfig(self, remoteRepoURL, overwrite=False):
         log.debug("Creating the config file with repository: %s" % remoteRepoURL)
@@ -479,7 +491,7 @@ class LbYumClient(object):
             os.makedirs(self.lbyumcache)
         if not os.path.exists(self.lbyumconf) or overwrite:
             ycf = open(self.lbyumconf, 'w')
-            ycf.write("repourl=%s" % remoteRepoURL)
+            ycf.write("baseurl=%s" % remoteRepoURL)
             ycf.close()
         else:
             raise Exception("Config file already exists")
@@ -496,15 +508,19 @@ class LbYumClient(object):
         else:
             raise Exception("Could not find configuration file")
 
+        self.repourl= None
         log.debug("Using Config file: %s" % configFile)
         ycf = open(configFile, 'r')
         for l in ycf.readlines():
-            m = re.match("repourl=\s*(.*)\s*$", l)
+            m = re.match("baseurl=\s*(.*)\s*$", l)
             if m != None:
                 self.repourl = m.group(1)
                 break
         ycf.close()
         self.configured = True
+
+        if self.repourl==None:
+            raise Exception("Could not find repository base URL in %s" % configFile)
 
         log.debug("Found repository URL: %s" % self.repourl)
         return self.repourl
@@ -569,7 +585,11 @@ class LbYumClient(object):
         # Setting up the variables
         self.localConfigRoot = localConfigRoot
         self.etcdir = os.path.join(localConfigRoot, SETC)
+        if not os.path.exists(self.etcdir):
+            os.makedirs(self.etcdir)
         self.lbyumcache = os.path.join(localConfigRoot, SVAR, SCACHE, SLBYUM)
+        if not os.path.exists(self.lbyumcache):
+            os.makedirs(self.lbyumcache)
         self.lbyumconf = os.path.join(self.etcdir, SLBYUMCONF)
         self.yumconf = os.path.join(self.etcdir, "yum.repos.d", "lhcb.repo")
         self.configured = False
@@ -596,7 +616,7 @@ class LbYumClient(object):
             log.debug("Loaded the pickled repository")
         else:
             log.debug("Loading the XML repository")
-            self.repository = Repository(self.repourl)
+            self.repository = RepositoryXML(self.repourl)
             self.repository.loadYumMetadataFile(self.localPrimaryXml)
             if usePickledDB:
                 log.debug("Pickling the repository")
@@ -616,12 +636,15 @@ if __name__ == '__main__':
 
     client = LbYumClient("/scratch/rpmsiteroot")
     #client.createConfig("https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/")
-    p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
-    print p
-    alldeps = p.getDependencies()
-    for dep in alldeps:
+    for p in client.listRPMPackages("BRUNEL.*"):
+        print "%s - %s" % (p.name, p.version)
+
+    #p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
+    #print p
+    #alldeps = p.getDependencies()
+    #for dep in alldeps:
         #print "Need: %s %s" % (dep.name, dep.version)
-        print "Need: %s" % (dep.url())
+    #    print "Need: %s" % (dep.url())
 
     #print "There are %d packages in repository" % client.repository.mPackageCount
     #reqCount = 0
