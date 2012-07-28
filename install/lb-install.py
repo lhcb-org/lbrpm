@@ -218,7 +218,7 @@ class InstallArea(object):
         if not os.path.exists(self.lib):
             os.makedirs(self.lib)
         # Add the local bin to the path
-        #XXXsys.path.append(self.lib)
+        sys.path.append(self.lib)
         self._getLbYum()
        # We keep config files compatible with YUM,
         # even though we use the DependencyManager client
