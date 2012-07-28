@@ -539,7 +539,7 @@ class InstallArea(object):
         self.log.info("Installing %s and dependencies" % package.rpmName())
 
         # Checking what files should be downloaded
-        installlist = package.getPackagesRequired()
+        installlist = self.lbYumClient.getAllPackagesRequired(package)
         self.log.info("Found %d RPMs to install" % len(installlist))
         if len(installlist) == 0:
             raise Exception("Error: No files to download")

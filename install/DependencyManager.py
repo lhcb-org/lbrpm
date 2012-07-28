@@ -896,7 +896,7 @@ class LbYumClient(object):
     ###########################################################################
     def getAllPackagesRequired(self, package):
         """ Get allpackages needed for installation (including the package itself)"""
-        deps = self.getDependencies(package)
+        deps = self.getPackageDependencies(package)
         deps.append(package)
         return deps
 
@@ -994,7 +994,7 @@ if __name__ == '__main__':
     #    client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
     #    client = LbYumClient(mysiteroot)
 
-    client = LbYumClient("/opt/siteroot")
+    #client = LbYumClient("/opt/siteroot")
     #for p in client.listRPMPackages("glibc.*"):
     #    print "%s - %s" % (p.name, p.version)
     #print client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
@@ -1003,12 +1003,12 @@ if __name__ == '__main__':
     #for p in client.listRPMPackages("BRUNEL.*"):
     #    print "%s - %s" % (p.name, p.version)
 
-    p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
-    print p
-    alldeps = client.getPackageDependencies(p)
-    for dep in alldeps:
+    #p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
+    #print p
+    #alldeps = client.getPackageDependencies(p)
+    #for dep in alldeps:
         #print "Need: %s %s" % (dep.name, dep.version)
-        print "Need: %s %s" % (dep.name, dep.url())
+    #    print "Need: %s %s" % (dep.name, dep.url())
 
     #print "There are %d packages in repository" % client.repository.mPackageCount
     #reqCount = 0
