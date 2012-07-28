@@ -178,14 +178,14 @@ class Package(VersionedObject):
     # Constructor and public method
     ###########################################################################
     def __init__(self, name=None, version=None, release=None, epoch=None, flags=None,
-                 group=None, arch=None, location=None, provides=[], require=[]):
+                 group=None, arch=None, location=None, provides=[], requires=[]):
         """ Default constructor """
         super( Package, self ).__init__(name, version, release, epoch, flags)
-        self.group = None
-        self.arch = None
-        self.location = None
-        self.requires = []
-        self.provides = []
+        self.group = group
+        self.arch = arch
+        self.location = location
+        self.requires = requires
+        self.provides = provides
         self.repository = None
 
     def setRepository(self, repo):
@@ -686,7 +686,6 @@ class RepositorySQLiteBackend(object):
         if len(matching) > 0:
             prov = sorted(matching)[-1]
             allpackages = self._loadPackageProviding(prov)
-            # XXX DEBUG HERE
             package = sorted(allpackages)[-1]
         return package
 
@@ -762,7 +761,7 @@ class RepositorySQLiteBackend(object):
         cursor=self.mDBConnection.cursor()
         # request to find the entry in the package table
         sq = """select p.pkgkey, p.name, p.version, p.release, p.epoch, p.rpm_group, p.arch, p.location_href
-             from packages p, requires r
+             from packages p, provides r
              where p.pkgkey = r.pkgkey
              and r.name = ?
              and r.version = ?
@@ -914,7 +913,6 @@ class LbYumClient(object):
             if reqPackage not in IGNORED_PACKAGES:
                 log.debug("Processing deps %s.%s-%s" % (reqPackage, reqVersion, reqRelease))
                 p = self.findPackageMatchingRequire(r)
-                print type(p)
                 if p != None:
                     requires.append(p)
                     for subreq in self._getpackageDeps(p):
@@ -996,7 +994,7 @@ if __name__ == '__main__':
     #    client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
     #    client = LbYumClient(mysiteroot)
 
-    client = LbYumClient("/scratch/rpmsiteroot")
+    client = LbYumClient("/opt/siteroot")
     #for p in client.listRPMPackages("glibc.*"):
     #    print "%s - %s" % (p.name, p.version)
     #print client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
@@ -1010,7 +1008,7 @@ if __name__ == '__main__':
     alldeps = client.getPackageDependencies(p)
     for dep in alldeps:
         #print "Need: %s %s" % (dep.name, dep.version)
-        print "Need: %s" % (dep.url())
+        print "Need: %s %s" % (dep.name, dep.url())
 
     #print "There are %d packages in repository" % client.repository.mPackageCount
     #reqCount = 0
