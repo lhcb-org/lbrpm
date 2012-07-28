@@ -663,6 +663,7 @@ class RepositorySQLiteBackend(object):
                 # Now getting the provides and requires
                 p.requires = self._loadRequiresByKey(pkgkey)
                 p.provides = self._loadProvidesByKey(pkgkey, p)
+                p.setRepository(self.mRepository)
                 # Now yield this
                 yield(p)
 
