@@ -98,11 +98,15 @@ class VersionedObject(object):
         if provide.name != self.name:
             return False
 
+        if self.version == None or (self.version != None and len(self.version) == 0):
+            return True
+
         allmethods = inspect.getmembers(self, predicate=inspect.ismethod)
         foundMethod = None
         for m in allmethods:
             if m[0].lower() == self.flags.lower():
                 foundMethod = m[1]
+
         return(foundMethod(provide))
 
     def __cmp__(self, other):
@@ -681,7 +685,9 @@ class RepositorySQLiteBackend(object):
         # Now lookup the matching package
         if len(matching) > 0:
             prov = sorted(matching)[-1]
-
+            allpackages = self._loadPackageProviding(prov)
+            # XXX DEBUG HERE
+            package = sorted(allpackages)[-1]
         return package
 
     #
@@ -908,6 +914,7 @@ class LbYumClient(object):
             if reqPackage not in IGNORED_PACKAGES:
                 log.debug("Processing deps %s.%s-%s" % (reqPackage, reqVersion, reqRelease))
                 p = self.findPackageMatchingRequire(r)
+                print type(p)
                 if p != None:
                     requires.append(p)
                     for subreq in self._getpackageDeps(p):
