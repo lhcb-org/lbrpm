@@ -186,6 +186,8 @@ class InstallArea(object):
         self.repourl = REPOURL
         self.extrasurl = "/".join([self.repourl, "extras"])
         self.rpmsurl = "/".join([self.repourl, "rpm"])
+        self.lcgsurl = "/".join([self.repourl, "lcg"])
+        self.lhcbsurl = "/".join([self.repourl, "lhcb"])
 
         # prefix for the RPMs
         self.rpmprefix = "/opt/lhcb"
@@ -199,6 +201,7 @@ class InstallArea(object):
         self.yumconf = os.path.join(self.etc, "yum.conf")
         self.yumreposd = os.path.join(self.etc, "yum.repos.d")
         self.yumrepolhcb = os.path.join(self.yumreposd, "lhcb.repo")
+        self.yumrepolcg = os.path.join(self.yumreposd, "lcg.repo")
 
 
         # tmp directory
@@ -272,7 +275,12 @@ class InstallArea(object):
             os.makedirs(self.yumreposd)
         if not os.path.exists(self.yumrepolhcb):
             yplf = open(self.yumrepolhcb, 'w')
-            yplf.write(_getYumRepo(self.siteroot, self.rpmsurl))
+            yplf.write(_getYumRepo(self.siteroot, "lhcbold", self.rpmsurl))
+            yplf.write(_getYumRepo(self.siteroot, "lhcb", self.lhcbsurl))
+            yplf.close()
+        if not os.path.exists(self.yumrepolcg):
+            yplf = open(self.yumrepolcg, 'w')
+            yplf.write(_getYumRepo(self.siteroot, "lcg", self.lcgsurl))
             yplf.close()
 
 
@@ -324,7 +332,7 @@ class InstallArea(object):
         """ Checks whether the repository was initialized """
         self.initfile = os.path.join(self.etc, "repoinit")
         if not os.path.exists(self.initfile):
-            self.installRpm("LBSCRIPTS")
+            #self.installRpm("LBSCRIPTS")
             fini = open(self.initfile, "w")
             fini.write(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             fini.close()
@@ -578,15 +586,16 @@ reposdir=/etc/yum.repos.d
 """).substitute(siteroot=siteroot)
     return cfile
 
-def _getYumRepo(siteroot, url):
+def _getYumRepo(siteroot, name, url):
     """ Builds the Yum repository configuration from template """
     cfile = Template("""
-[lhcb]
+[$name]
 #REPOVERSION 0001
-name=LHCb
+name=$name
 baseurl=$url
 enabled=1
-""").substitute(siteroot=siteroot, url=url)
+
+""").substitute(siteroot=siteroot, url=url, name=name)
     return cfile
 
 
@@ -598,7 +607,7 @@ def usage(cmd) :
     print """\n%(cmd)s -  install a project in the MYSITEROOT directory'
 
 Th environment variable MYSITEROOT MUST be set for this script to work.
-It can be used in the followoing way:
+It can be used in the following way:
 
 %(cmd)s [-d][-b] <project> <version>
 This installs a LHCb project, with the binaries if -b is specified.
@@ -642,7 +651,7 @@ SUSR = "usr"
 SBIN = "bin"
 
 # Default repository URL
-REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm/"
+REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm"
 
 def main():
     """ Main method for the command """

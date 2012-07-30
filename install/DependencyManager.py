@@ -883,7 +883,9 @@ class LbYumClient(object):
 
         # Looking for matches in all repos
         for r in self.repositories.values():
-            allmatching.append(r.findPackageMatchingRequire(requirement))
+            m = r.findPackageMatchingRequire(requirement)
+            if m != None:
+                allmatching.append(m)
 
         # Sorting to get latest one
         allmatching.sort()
@@ -995,10 +997,14 @@ if __name__ == '__main__':
     #    client.createConfig("http://linuxsoft.cern.ch/cern/slc6X/x86_64/yum/os")
     #    client = LbYumClient(mysiteroot)
 
-    #client = LbYumClient("/opt/siteroot")
+    client = LbYumClient("/scratch/rpmsiteroot")
     #for p in client.listRPMPackages("glibc.*"):
     #    print "%s - %s" % (p.name, p.version)
-    #print client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
+    p = client.getRPMPackage("LBSCRIPTS")
+    print p
+    alldeps = client.getPackageDependencies(p)
+    for dep in alldeps:
+        print "Need: %s %s" % (dep.name, dep.url())
 
     #client.createConfig("https://test-lbrpm.web.cern.ch/test-lbrpm/rpm/")
     #for p in client.listRPMPackages("BRUNEL.*"):
