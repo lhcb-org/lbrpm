@@ -332,7 +332,7 @@ class InstallArea(object):
         """ Checks whether the repository was initialized """
         self.initfile = os.path.join(self.etc, "repoinit")
         if not os.path.exists(self.initfile):
-            #self.installRpm("LBSCRIPTS")
+            self.installRpm("LBSCRIPTS")
             fini = open(self.initfile, "w")
             fini.write(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             fini.close()
