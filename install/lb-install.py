@@ -221,7 +221,7 @@ class InstallArea(object):
         if not os.path.exists(self.lib):
             os.makedirs(self.lib)
         # Add the local bin to the path
-        #XXXsys.path.append(self.lib)
+        sys.path.append(self.lib)
         self._getLbYum()
        # We keep config files compatible with YUM,
         # even though we use the DependencyManager client
@@ -547,7 +547,7 @@ class InstallArea(object):
         self.log.info("Installing %s and dependencies" % package.rpmName())
 
         # Checking what files should be downloaded
-        installlist = package.getPackagesRequired()
+        installlist = self.lbYumClient.getAllPackagesRequired(package)
         self.log.info("Found %d RPMs to install" % len(installlist))
         if len(installlist) == 0:
             raise Exception("Error: No files to download")
