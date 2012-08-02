@@ -1,0 +1,50 @@
+#!/usr/bin/env python
+"""
+Command to convert a LHCb project tar ball in a RPM file
+"""
+
+import logging
+import os
+import sys
+import BuildDirHelpers
+import shutil
+
+log = logging.getLogger()
+log.addHandler(logging.StreamHandler())
+log.setLevel(logging.INFO)
+
+
+# Checking arguments
+################################################################################
+def usage():
+    print >> sys.stderr, "Usage: %s builddir config targetdir" % sys.argv[0]
+    sys.exit(2)
+
+
+from optparse import OptionParser
+parser = OptionParser()
+(options, args) = parser.parse_args()
+
+
+maxarg = len(args)
+if  maxarg < 3:
+    print >> sys.stderr, "Missing arguments!"
+    usage()
+
+builddir = args[0]
+cmtconfig = args[1]
+targetdir = args[2]
+
+# First checking the config
+(prefix, project, version) = BuildDirHelpers.parseBuildDirName(builddir)
+
+filelist = BuildDirHelpers.filterBuildDir(builddir, cmtconfig)
+for f in filelist:
+    topdir = os.path.join(targetdir, "opt/lhcb/lhcb/")
+    targetname = f.replace(prefix + os.sep, topdir)
+    print "Copy %s to %s" %(f, targetname)
+    if not os.path.exists(os.path.dirname(targetname)):
+        os.makedirs(os.path.dirname(targetname))
+    shutil.copy2(f, targetname)
+
+

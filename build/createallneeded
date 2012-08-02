@@ -1,0 +1,20 @@
+createProjectSourceRpm.py ANALYSIS v10r1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/ANALYSIS/ANALYSIS_v10r1
+createProjectSourceRpm.py BRUNEL v43r1p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/BRUNEL/BRUNEL_v43r1p1
+createProjectSourceRpm.py DAVINCI v32r1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/DAVINCI/DAVINCI_v32r1
+createProjectSourceRpm.py DAVINCI v32r1p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/DAVINCI/DAVINCI_v32r1p1
+createProjectSourceRpm.py GAUSS v42r1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/GAUSS/GAUSS_v42r1
+createProjectSourceRpm.py LBCOM v13r1p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/LBCOM/LBCOM_v13r1p1
+createProjectSourceRpm.py LHCB v35r1p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/LHCB/LHCB_v35r1p1
+createProjectSourceRpm.py MOORE v14r2p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/MOORE/MOORE_v14r2p1
+createProjectSourceRpm.py PHYS v16r1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/PHYS/PHYS_v16r1
+createProjectSourceRpm.py REC v14r1p1
+createProjectRpmFromBuild.py /afs/cern.ch/lhcb/software/releases/REC/REC_v14r1p1

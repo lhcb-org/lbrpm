@@ -1,0 +1,62 @@
+%define filename %{project}_%{project}_%{lbversion}.tar.gz
+%define rpmversion %{lbversion}
+
+
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
+
+Name: %{project}_%{rpmversion}
+Version: 1.0.0
+Release: 1
+Vendor: LHCb
+Summary: %{project}
+License: GPL
+Group: LHCb
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{name}-buildroot
+BuildArch: noarch
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+
+%description
+%{project}
+
+%prep
+echo "Building source RPM <%{project}><%{lbversion}>"
+
+
+%build
+
+%install
+
+
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+echo "Package name <%{name}>"
+
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+getpack --no-config -r -P %{project} %{lbversion}
+
+%post
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+/opt/lhcb/lhcb/%{project}/%{project}_%{lbversion}/
+
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+
