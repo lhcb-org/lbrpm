@@ -13,9 +13,22 @@ lcgcmt_project = "LCGCMT"
 lcgcmt_version = sys.argv[1]
 lcgcmt_cmtconfig = sys.argv[2]
 
-topdir = "/scratch/z5/rpmbuild"
-tmpdir = "/scratch/z5/tmpbuild"
-rpmtmp = "/scratch/z5/tmp"
+#topdir = "/scratch/z5/rpmbuild"
+#tmpdir = "/scratch/z5/tmpbuild"
+#rpmtmp = "/scratch/z5/tmp"
+
+myroot = "/tmp"
+topdir = "%s/rpmbuild" % myroot
+tmpdir = "%s/tmpbuild" % myroot
+rpmtmp = "%s/tmp" % myroot
+
+srcdir = os.path.join(topdir, "SOURCES")
+rpmsdir =  os.path.join(topdir, "RPMS")
+srpmsdir =  os.path.join(topdir, "SRPMS")
+
+for d in [srcdir, rpmsdir, srpmsdir]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 appWihSubdir = ['Grid']
 appWithoutConfig = ['LCGCMT' ]
@@ -23,9 +36,9 @@ appWithoutConfig = ['LCGCMT' ]
 buildroot = os.path.join(tmpdir, "LCGCMT-%s-%s-buildroot" % (lcgcmt_version, lcgcmt_cmtconfig))
 if not os.path.exists(buildroot):
     os.makedirs(buildroot)
-    
-externaldir = os.path.join(buildroot, "opt", "lhcb", "lcg", "external")
 
+externaldir = os.path.join(buildroot, "opt", "lhcb", "lcg", "external")
+appreleasesdir = os.path.join(buildroot, "opt", "lhcb", "lcg", "app", "releases")
 # Class representing a RPM
 ###############################################################################
 class Rpm(object):
@@ -65,7 +78,7 @@ full_filename = os.path.join(topdir, "SOURCES", filename)
 
 # Downloading the tarball if necessary
 if not os.path.exists(full_filename):
-    print >> sys.stderr, "## retrieving %s" % url
+    print >> sys.stderr, "## retrieving %s to %s " % (url, full_filename)
     import urllib
     urllib.urlretrieve (url, full_filename)
 else:
@@ -76,13 +89,13 @@ else:
 # TODO: We really shoudl do this based on the tar metainfo....
 lhcbdir = os.path.join(buildroot, "opt", "lhcb", "lcg")
 if not os.path.exists(lhcbdir):
-    print >> sys.stderr, "## Extracting tarball" 
+    print >> sys.stderr, "## Extracting tarball to %s" % lhcbdir
     os.makedirs(lhcbdir)
     t = tarfile.open(full_filename, "r:gz")
     t.extractall(path=lhcbdir)
 else:
     print >> sys.stderr, "## tarball already extracted in %s" % lhcbdir
-    
+
 # Exception to the name of the common package
 ###############################################################################
 common_exceptions = {}
@@ -106,14 +119,14 @@ def buildRpmInfo(buildroot, directory, cmtconfig):
     """ Builds the Rpm object, expecting the subdir structure:
     application/version/cmtconfig """
     retrpms = []
-    
+
 
     app = os.path.basename(directory)
     tmpd = os.listdir(directory)
 
     # There should be ONLY ONE subdir, named as the version
     if len(tmpd) != 1:
-        raise Exception("Error with %s" % app)    
+        raise Exception("Error with %s" % app)
     version = tmpd[0]
 
     # Dealing with the cases where there is no subdirectory below
@@ -125,7 +138,7 @@ def buildRpmInfo(buildroot, directory, cmtconfig):
             # Checking the name of the common rpm
             cname = getCommonPackageName(app, d)
             if cname != COMMON:
-                rpm.config = cname            
+                rpm.config = cname
             if isdir:
                 rpm.files.append(os.path.join(dpath, "").replace(buildroot, ""))
             else:
@@ -150,7 +163,7 @@ def buildRpmInfo(buildroot, directory, cmtconfig):
             if cname != COMMON:
                 commonRpm.config = cname
             target = commonRpm
-            
+
         if isdir:
             target.files.append(os.path.join(dpath, "").replace(buildroot, ""))
         else:
@@ -163,7 +176,7 @@ def buildRpmInfo(buildroot, directory, cmtconfig):
         retrpms.append(cmtconfigRpm)
 
     return retrpms
-        
+
 
 
 
@@ -187,6 +200,26 @@ for app in os.listdir(externaldir):
             allapps.append(r)
 
 for r in allapps:
+    print >> sys.stderr, r
+
+apprelapps = []
+for app in os.listdir(appreleasesdir):
+    if not app in appWihSubdir:
+        allapps += buildRpmInfo(buildroot, os.path.join(appreleasesdir, app), lcgcmt_cmtconfig)
+    else:
+        hat = app
+        tmplist = []
+        # Building the RPMS as normal
+        for subapp in os.listdir(os.path.join(appreleasesdir, hat)):
+            tmplist += buildRpmInfo(buildroot, os.path.join(appreleasesdir, hat, subapp), lcgcmt_cmtconfig)
+
+        # Add the hat
+        for r in tmplist:
+            r.hat = hat
+            apprelapps.append(r)
+
+
+for r in apprelapps:
     print >> sys.stderr, r
 
 
@@ -263,24 +296,24 @@ rpm_common = """
 
 %install
 
-#cd %_topdir/SOURCES
-#wget -nc %url
-#if [ $? -ne 0 ]; then
-#  exit $?
-#fi
+cd %_topdir/SOURCES
+wget -nc %url
+if [ $? -ne 0 ]; then
+  exit $?
+fi
 
-#[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
 
-#/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lcg
-#if [ $? -ne 0 ]; then
-#  exit $?
-#fi
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lcg
+if [ $? -ne 0 ]; then
+  exit $?
+fi
 
-#cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
-#gzip -dc %_topdir/SOURCES/%{filename} | tar -xvvf -
-#if [ $? -ne 0 ]; then
-#  exit $?
-#fi
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
+gzip -dc %_topdir/SOURCES/%{filename} | tar -xvvf -
+if [ $? -ne 0 ]; then
+  exit $?
+fi
 
 %post
 
@@ -294,10 +327,10 @@ rpm_common = """
 rpm_files = ""
 for r in allapps:
     rpm_files += "\n%%files -n  %s\n" % (r.getRPMName())
-    rpm_files += "%defattr(-,root,root)\n" 
+    rpm_files += "%defattr(-,root,root)\n"
     for f in r.files:
         rpm_files += "%s\n" % f
-    
+
 
 rpm_trailer = """
 %define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)

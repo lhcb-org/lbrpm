@@ -17,27 +17,8 @@ log.setLevel(logging.INFO)
 local_directory = os.path.dirname(__file__).strip()
 os.environ['PATH'] =  os.pathsep.join([os.environ['PATH'], local_directory])
 
-# Util method to prepare the build area
-################################################################################
-def checkBuildAra(ba):
 
-    if not os.path.exists(ba):
-        os.makedirs(ba)
-
-    basdirs = [ 'rpmbuild', 'tmpbuild', 'tmp' ]
-    for s in basdirs:
-        tmp = os.path.join(ba, s)
-        if not os.path.exists(tmp):
-            os.makedirs(tmp)
-        
-    rpmbuild =  os.path.join(ba, 'rpmbuild')
-    sdirs = [ 'SOURCES', 'RPMS', 'BUILD', 'SRPMS' ]
-    for s in sdirs:
-        tmp = os.path.join(rpmbuild, s)
-        if not os.path.exists(tmp):
-            os.makedirs(tmp)
-
-# Checking arguments 
+# Checking arguments
 ################################################################################
 def usage():
     print >> sys.stderr, "Usage: %s project version" % sys.argv[0]
@@ -160,4 +141,4 @@ rc = subprocess.call(cmd, shell=True)
 sys.exit(rc)
 
 
-    
+

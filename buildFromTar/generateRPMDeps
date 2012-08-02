@@ -103,7 +103,7 @@ def generateDependencyList(pname, pversion, tar_bin, tar_opt):
     #print "Corrected name:%s - %s" % (p.Name(), pname)
 
     pname = p.Name()
-    
+
     if os.environ.has_key('CMTPROJECTPATH'):
         CMTPROJECTPATH = os.environ['CMTPROJECTPATH']
     else:
@@ -118,7 +118,7 @@ def generateDependencyList(pname, pversion, tar_bin, tar_opt):
     else:
         env = ''
 
-        
+
 
     PACK = pname.upper()
 
@@ -132,18 +132,18 @@ def generateDependencyList(pname, pversion, tar_bin, tar_opt):
 #
 # === if binary tar file is requested make sure that the InstallArea has been built ========
 #
-    if CMTPROJECTPATH == '':
-        if platform != '':
-            ia_dir = os.path.join(maindir, 'InstallArea')
-            if not os.path.isdir(os.path.join(ia_dir, binary)):
-                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary)))
-                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'lib')))
-                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'bin')))
-            l = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'lib'))
-            b = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'bin'))
-            if len(l) == 0 and len(b) == 0 :
-                sys.exit('no library for this binary %s ' % (binary))
-    
+#    if CMTPROJECTPATH == '':
+#        if platform != '':
+#            ia_dir = os.path.join(maindir, 'InstallArea')
+#            if not os.path.isdir(os.path.join(ia_dir, binary)):
+#                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary)))
+#                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'lib')))
+#                os.mkdir(os.path.isdir(os.path.join(ia_dir, binary, 'bin')))
+#            l = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'lib'))
+#            b = os.listdir(os.path.join(maindir, 'InstallArea', binary, 'bin'))
+#            if len(l) == 0 and len(b) == 0 :
+#                sys.exit('no library for this binary %s ' % (binary))
+
     os.environ['CMTPATH'] = ''
     if CMTPROJECTPATH == '':
         os.chdir(os.path.join(env, pversion, 'cmt'))
@@ -194,7 +194,7 @@ def generateDependencyList(pname, pversion, tar_bin, tar_opt):
 # DBASE and PARAM package dependencies are found using 'cmt show uses'
 
     tmpdir = TempDir(prefix="mkLHCbtar")
-    
+
     path_list = CMTPATH.split(':')
 
     #print "######## %s " % path_list
@@ -205,7 +205,7 @@ def generateDependencyList(pname, pversion, tar_bin, tar_opt):
         dver = os.path.basename(p)
         if dver == 'DBASE' or dver == 'PARAM' or dver == 'TOOLS' : continue
         dnam = dver.split('_')[0]
-        #print "####### %s %s" % (dnam, dver) 
+        #print "####### %s %s" % (dnam, dver)
         if dnam == 'LCGCMT' or p.find('OpenScientist') != -1 or p.find('osc_vis') != -1 :
             if dnam != 'LCGCMT' :
                 if p.find('OpenScientist') != -1 :
@@ -341,8 +341,8 @@ class getProjectDepsScript(Script):
                 tar_bin = extraver
                 tar_opt = tar_bin
                 if isBinaryDbg(tar_opt) :
-                    tar_opt = "_" + getBinaryOpt(binary)
-            
+                    tar_opt = "_" + getBinaryOpt(tar_bin)
+
             if extraver == "noarch" or len(extraver) == 0:
                 sys.exit(0)
 
@@ -365,13 +365,13 @@ class getProjectDepsScript(Script):
 		else:
                     if not extraver.startswith("_"):
                         extraver = "_" + extraver
-                    
+
                     print "Requires: %s_%s%s" % (d[0].upper(), tmpd, extraver)
 
             # Add dependcy to source package
             if extraver != "noarch":
                  print "Requires: %s_%s" % (project.upper(), version)
-		
+
 
     def traverseDependencies(self, project, version, alreadyDone = []):
         """ Recursively traverse all dependencies.

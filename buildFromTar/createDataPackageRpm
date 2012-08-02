@@ -56,8 +56,17 @@ parser.add_option("--release", dest="release", action="store",
 
 (options, args) = parser.parse_args()
 
-maxarg = len(args) -1
-if  maxarg < 3:
+maxarg = len(args)-1 
+if  len(args) == 3:
+    project = args[0].upper()
+    version = args[-1]
+    package = args[1] 
+elif len(args) > 3:
+    project = args[0].upper()
+    original_version = args[0]
+    version = args[-1]
+    package = "_".join(args[1:maxarg])
+else:
     print >> sys.stderr, "Missing arguments!"
     usage()
 

@@ -12,7 +12,7 @@
 %define _tmppath %{build_area}/tmp
 
 Name: %{project}_%{rpmversion}
-Version:1.0.0
+Version: 1.0.0
 Release: 1
 Vendor: LHCb
 Summary: %{project}
