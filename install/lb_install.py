@@ -10,7 +10,6 @@ Version 1.0
 import getopt
 import logging
 import os
-import re
 import subprocess
 import sys
 import time
@@ -89,7 +88,7 @@ def callSimple(command):
 def checkForCommand(command):
     """ Check whether a command is in the path using which """
     whichcmd = "which %s" % command
-    rc, out, err = call(whichcmd)
+    rc, out, err = call(whichcmd) #@UnusedVariable
     return rc, out
 
 # Utilities for log printout
@@ -223,7 +222,7 @@ class InstallArea(object):
         # Add the local bin to the path
         sys.path.append(self.lib)
         self._getLbYum()
-       # We keep config files compatible with YUM,
+        # We keep config files compatible with YUM,
         # even though we use the DependencyManager client
         self._initYUM()
         from DependencyManager import LbYumClient
@@ -396,7 +395,7 @@ class InstallArea(object):
         foundPackages = []
         pname = name.upper()
         pnameVer = None
-        pnameVerConf = None
+        pnameVerConfig = None
         if version != None:
             pnameVer = pname + "_" + version
         else:
@@ -488,7 +487,7 @@ class InstallArea(object):
 
         # Shold be improved to yield line per line instead of reading it all in block
         pc = subprocess.Popen(rpmcmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out, err = pc.communicate()
+        out, err = pc.communicate() #@UnusedVariable
         rc = pc.returncode
 
         if rc != 0:
@@ -514,7 +513,6 @@ class InstallArea(object):
         yum install """
         # Looking for the package
         self.log.info("Installing %s/%s/%s" % (project, version, cmtconfig))
-        rpmname = None
         matches = self._findpackage(project, version, cmtconfig)
         self.log.info("Found %d matches" % len(matches))
         for ma in matches:

@@ -1,6 +1,7 @@
 %define filename %{project}_%{project}_%{lbversion}.tar.gz
 %define rpmversion %{lbversion}
 
+%global __os_install_post /usr/lib/rpm/check-buildroot
 
 %define _topdir %{build_area}/rpmbuild
 %define tmpdir %{build_area}/tmpbuild

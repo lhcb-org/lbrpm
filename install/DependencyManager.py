@@ -264,7 +264,7 @@ class Repository(object):
             log.info("Checking availability of interface: %s" % b.__name__)
             try:
                 try:
-                    (checksum, timestamp, filename) = remotemd[b.yumDataType()]
+                    (checksum, timestamp, filename) = remotemd[b.yumDataType()] #@UnusedVariable
                 except KeyError:
                     log.info("Remote repository does not provide %s DB" % b.__name__)
                 # A priori we have a match (KeyError otherwise)
@@ -272,7 +272,7 @@ class Repository(object):
                 self.backend = backend
                 ltimestamp = None
                 try:
-                    (lchecksum, ltimestamp, lfilename) =  localmd[b.yumDataType()]
+                    (lchecksum, ltimestamp, lfilename) =  localmd[b.yumDataType()] #@UnusedVariable
                 except:
                     pass
                     # Doesn't matter, we download DB in this case
@@ -723,7 +723,7 @@ class RepositorySQLiteBackend(object):
         cursorSub=self.mDBConnection.cursor()
         sqprov = "select pkgkey, name, flags, epoch, version, release from provides where name=?"
         resprov = cursorSub.execute(sqprov, [ name ])
-        for (pkgkey, name, flags, epoch, version, release) in resprov:
+        for (pkgkey, name, flags, epoch, version, release) in resprov: #@UnusedVariable
             prov = Provides(name, version, release, epoch, flags, None)
             allprovides.append(prov)
         cursorSub.close()

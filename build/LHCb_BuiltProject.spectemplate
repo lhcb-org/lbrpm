@@ -6,6 +6,8 @@
 %define allreqs %( createRequiresFromBuild.py %{releasedir} %{orig_config})
 %define rpmversion %{lbversion}%{cmtconfig_rpm}
 
+%global __os_install_post /usr/lib/rpm/check-buildroot
+
 
 %define _topdir %{build_area}/rpmbuild
 %define tmpdir %{build_area}/tmpbuild
@@ -32,7 +34,8 @@ Requires: %{project}_%{lbversion}
 
 %prep
 echo "Building <%{project}><%{lbversion}><%{cmtconfig}>"
-
+echo %__os_install_post
+exit
 %build
 
 %install
