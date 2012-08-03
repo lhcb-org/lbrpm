@@ -86,7 +86,7 @@ if useVersion:
 
 allconfigs = BuildDirHelpers.listBuiltConfigs(releasedir)
 log.info("Found following CMTCONFIGS built: %s" % ",".join(allconfigs))
-
+allconfigs = ["x86_64-slc5-gcc43-opt"]
 
 for cmtconfig in allconfigs:
 

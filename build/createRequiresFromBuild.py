@@ -31,8 +31,9 @@ if __name__ == '__main__':
     # Now preparing the requires section
     ################################################################################
     alldeps = ""
+    rpmconfig = cmtconfig.replace("-", "_")
     for (pname, pnamever) in allprojects:
-        alldeps += "Requires: %s_%s\n" % (pnamever, cmtconfig)
+        alldeps += "Requires: %s_%s\n" % (pnamever, rpmconfig)
     for (pname, pver) in datapackages:
         alldeps += "Requires: %s\n" % pname
     print alldeps

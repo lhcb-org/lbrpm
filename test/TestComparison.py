@@ -50,14 +50,14 @@ class TestComparison(unittest.TestCase):
         self.assertEqual(sortedvers[0], p3)
         self.assertEqual(sortedvers[1], p2)
         self.assertEqual(sortedvers[2], p1)
-        
+
     def testMatchEqual(self):
         name = "TestPackage"
         version1 = "1.0.1"
         version2 = "1.2.0"
         release = "2"
         release2 = "3"
-        
+
         # Checking equality
         p1 = Provides(name, version1, release)
         r = Requires(name, version1, release, 0, "EQ", None)
@@ -80,14 +80,14 @@ class TestComparison(unittest.TestCase):
         version1 = "1.0.1"
         version2 = "1.2.0"
         version3 = "1.3.5"
-        
+
         release = "2"
-        
+
         # Checking simple comparison
         p1 = Provides(name, version1, release)
         p2 = Provides(name, version2, release)
         p3 = Provides(name, version3, release)
-        
+
         ctor = "GT"
         r = Requires(name, version2, release, 0, ctor, None)
 
@@ -106,14 +106,14 @@ class TestComparison(unittest.TestCase):
         version1 = "1.0.1"
         version2 = "1.2.0"
         version3 = "1.3.5"
-        
+
         release = "2"
-        
+
         # Checking simple comparison
         p1 = Provides(name, version1, release)
         p2 = Provides(name, version2, release)
         p3 = Provides(name, version3, release)
-        
+
         ctor = "LT"
         r = Requires(name, version2, release, 0, ctor, None)
 
@@ -126,6 +126,40 @@ class TestComparison(unittest.TestCase):
         self.assertTrue(r.provideMatches(p1), "%s %s %s" % (p1, ctor, r))
         self.assertTrue(r.provideMatches(p2), "%s %s %s" % (p2, ctor, r))
         self.assertFalse(r.provideMatches(p3), "%s not %s %s" % (p3, ctor, r))
+
+    def testRequireWithNoVersion(self):
+        name = "TestPackage"
+        version1 = "1.0.1"
+        release = "2"
+
+        # Checking simple comparison
+        p1 = Provides(name, version1, release)
+
+        r = Requires(name, None, None)
+
+        self.assertTrue(r.provideMatches(p1))
+
+    def testDifferentName(self):
+        name = "TestPackage"
+        version1 = "1.0.1"
+        release = "2"
+
+        # Checking simple comparison
+        p1 = Provides(name, version1, release)
+
+        r = Requires(name + "Toto", None, None)
+
+        self.assertFalse(r.provideMatches(p1))
+
+    def testOrderDifferentName(self):
+        name = "TestPackage"
+        version1 = "1.0.1"
+        release = "2"
+
+        # Checking simple comparison
+        p1 = Provides(name, version1, release)
+        p2 = Provides(name+"z",version1, release)
+        self.assertTrue(p1 < p2)
 
 
 if __name__ == "__main__":
