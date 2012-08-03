@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# CHecking whether a MYSITEROOT is present
+${MYSITEROOT?Error \$Variable is not define it for installation}
+
+GITURL=http://cern.ch/lhcbproject/GIT/lbrpm.git
+REPODIR=MYSITEROOT/lbrpm/
+
+cd $REPODIR
+if [ -e $MYSITEROOT/lbrpm/.git ] ; then
+	git pull
+else
+	git clone
+fi
+
+python $MYSITEROOT/lbrpm/lb_install.py
+
+
