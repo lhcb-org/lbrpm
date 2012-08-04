@@ -1,18 +1,26 @@
 #!/bin/sh
 
-# CHecking whether a MYSITEROOT is present
-${MYSITEROOT?Error \$Variable is not define it for installation}
-
-GITURL=http://cern.ch/lhcbproject/GIT/lbrpm.git
-REPODIR=MYSITEROOT/lbrpm/
-
-cd $REPODIR
-if [ -e $MYSITEROOT/lbrpm/.git ] ; then
-	git pull
-else
-	git clone
+# Check whether a MYSITEROOT is present
+if [ -z $MYSITEROOT ]; then 
+   echo "Error - MYSITEROOT is not defined. Define it for installation root"
 fi
 
-python $MYSITEROOT/lbrpm/lb_install.py
+#GITURL=http://cern.ch/lhcbproject/GIT/lbrpm.git
+GITURL=/afs/cern.ch/user/l/lben/public/lbrpmprod/
+
+if [ ! -e $MYSITEROOT ]; then
+	mkdir -p $MYSITEROOT
+fi
+
+cd $MYSITEROOT
+if [ -e $MYSITEROOT/.git ] ; then
+	git pull
+else
+	git init
+	git remote add -t prod -f origin $GITURL 
+	git checkout prod -f
+fi
+
+python $MYSITEROOT/lb_install.py $*
 
 
