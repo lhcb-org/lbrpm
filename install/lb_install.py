@@ -221,7 +221,6 @@ class InstallArea(object):
             os.makedirs(self.lib)
         # Add the local bin to the path
         sys.path.append(self.lib)
-        self._getLbYum()
         # We keep config files compatible with YUM,
         # even though we use the DependencyManager client
         self._initYUM()
@@ -259,7 +258,6 @@ class InstallArea(object):
             if rc != 0:
                 raise Exception("Error initializing RPM DB: %s" % stderr)
 
-
     def _initYUM(self):
         """ Initializes yum configuration.
         Still in use as LbYum uses a compatible configuration """
@@ -281,19 +279,6 @@ class InstallArea(object):
             yplf = open(self.yumrepolcg, 'w')
             yplf.write(_getYumRepo(self.siteroot, "lcg", self.lcgsurl))
             yplf.close()
-
-
-    def _getLbYum(self):
-        """ Downloads the version of LbYum DependencyManager from the extras directory """
-        depman = "DependencyManager.py"
-        url = "/".join([ self.extrasurl, depman])
-        ydpath = os.path.join(self.lib, depman)
-        self.log.info("Downloading %s to %s" % ( url, ydpath) )
-        import urllib
-        urllib.urlretrieve (url, ydpath)
-        os.chmod(ydpath, 0755)
-
-
 
     def _checkPrerequisites(self):
         """ Checks that external tools required by this tool to perform
@@ -715,8 +700,6 @@ def main():
         print >> sys.stderr, '-'*60
         rc = 1
     return rc
-
-
 
 if __name__ == "__main__":
     sys.exit(main())
