@@ -7,8 +7,9 @@ Ben Couturier <ben.couturier@cern.ch>
 Version 1.0
 
 """
-import optparse
+import inspect
 import logging
+import optparse
 import os
 import subprocess
 import sys
@@ -53,7 +54,6 @@ class LbInstallConfig(object):
         # Simple logger by default
         self.log = None
 
-
     def setLogger(self):
         """ Defines a custom logger """
         if self.log != None:
@@ -61,20 +61,20 @@ class LbInstallConfig(object):
 
         # Setting the logger
         thelog = logging.getLogger()
-#        thelog.setLevel(logging.DEBUG)
-#        console = logging.StreamHandler()
-#        if self.python_version < (2, 5, 1) :
-#            console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
-#        else :
-#            if self.debug:
-#                console.setFormatter(logging.Formatter("%(levelname)-8s: %(funcName)-25s - %(message)s"))
-#            else :
-#                console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
+        thelog.setLevel(logging.DEBUG)
+        console = logging.StreamHandler()
+        if self.python_version < (2, 5, 1) :
+            console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
+        else :
+            if self.debug:
+                console.setFormatter(logging.Formatter("%(levelname)-8s: %(funcName)-25s - %(message)s"))
+            else :
+                console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
         if self.debug:
             thelog.setLevel(logging.DEBUG)
         else :
             thelog.setLevel(logging.INFO)
-  #      thelog.addHandler(console)
+        thelog.addHandler(console)
         self.log = thelog
         return thelog
 
@@ -115,7 +115,6 @@ def printHeader(config):
     thelog.info('=' * config.line_size)
     thelog.debug("Command line arguments: %s" % " ".join(sys.argv))
 
-
 def printTrailer(config):
     """ Prints the standard trailer as in install_project """
     # Trailer
@@ -125,12 +124,8 @@ def printTrailer(config):
     thelog.info(('<<< %s - End of lb-install.py %s >>>' % (end_time, config.script_version)).center(config.line_size))
     thelog.info('=' * config.line_size)
 
-
-
 # Class representing the repository
 ###############################################################################
-
-
 class InstallArea(object):
     """ Class representing the software InstallArea,
     with all related actions"""
@@ -141,7 +136,6 @@ class InstallArea(object):
         """ Init of the InstallArea, check that all directories and config files
         are present.
         """
-
         # Setting the siteroot
         self.siteroot = config.siteroot
         self.config = config
@@ -168,7 +162,6 @@ class InstallArea(object):
         self.yumrepolhcb = os.path.join(self.yumreposd, "lhcb.repo")
         self.yumrepolcg = os.path.join(self.yumreposd, "lcg.repo")
 
-
         # tmp directory
         self.tmpdir = os.path.join(self.siteroot, STMP)
         if not os.path.exists(self.tmpdir):
@@ -193,7 +186,6 @@ class InstallArea(object):
         from DependencyManager import LbYumClient
         self.lbYumClient = LbYumClient(self.siteroot)
 
-
         # Defining structures and
         # Checking if all needed tools are available
         self.externalStatus = {}
@@ -204,7 +196,6 @@ class InstallArea(object):
         # And if all the software is there
         self.initfile = None
         self._checkRepository()
-
 
     def _initRPMDB(self):
         """ Initialize RPM database """
@@ -249,7 +240,6 @@ class InstallArea(object):
     def _checkPrerequisites(self):
         """ Checks that external tools required by this tool to perform
         the installation """
-
         # Flag indicating whether a crucial external is missing and we cannot run
         externalMissing = False
 
@@ -276,7 +266,6 @@ class InstallArea(object):
                 else:
                     externalMissing = True
         return externalMissing
-
 
     def _checkRepository(self):
         """ Checks whether the repository was initialized """
@@ -320,11 +309,10 @@ class InstallArea(object):
             nameRegexp = args[0]
 
         totalMatching = 0
-        for p in self.lbYumClient.listRPMPackages(nameRegexp):
+        for p in self.lbYumClient.listPackages(nameRegexp):
             self.log.info(p.rpmName())
             totalMatching+=1
         self.log.info("Total Matching: %d" % totalMatching)
-
 
     # Various utility methods to download/check RPMs
     ##########################################################################
@@ -342,8 +330,6 @@ class InstallArea(object):
 
     def _findpackage(self, name, version, cmtconfig):
         """ Find all the packages matching a triplet name, version, config """
-        # TODO: Implement according to LHCb package naming conventions... XXX
-        foundPackages = []
         pname = name.upper()
         pnameVer = None
         pnameVerConfig = None
@@ -356,17 +342,19 @@ class InstallArea(object):
         else:
             pnameVerConfig = pnameVer
 
+        from DependencyManager import Requires
+        r = Requires(pnameVerConfig, None, None, None, "GT", None)
+        p = self.lbYumClient.findLatestMatchingRequire(r)
         # Checking if the package uses standard naming...
-        allpackages = self.lbYumClient.listRPMPackages(pname + ".*")
-        fullmatch = [ p for p in allpackages if p.name == pnameVerConfig ]
-        if len(fullmatch) > 0:
+        #allpackages = self.lbYumClient.listPackages(pname + ".*")
+        #fullmatch = [ p for p in allpackages if p.name == pnameVerConfig ]
+        #if len(fullmatch) > 0:
             # taking the last one...
-            foundPackages.append(sorted(fullmatch)[-1])
-        else:
+        #    foundPackages.append(sorted(fullmatch)[-1])
+        #else:
             # Trying to match the full package name...
-
-            raise Exception("Could not find package matching: %s %s %s" % (name, version, cmtconfig))
-        return foundPackages
+        #   raise Exception("Could not find package matching: %s %s %s" % (name, version, cmtconfig))
+        return [ p ]
 
     def _filterUrlsAlreadyInstalled(self, packages):
         """ Filter out RPMs already installed """
@@ -415,7 +403,6 @@ class InstallArea(object):
         if rc != 0:
             raise Exception("Error installing rpms")
 
-
     def _isRpmInstalled(self, rpmname, rpmversion=None):
         """ Checks whether a given RPM apckage is already installed """
         installed = False
@@ -430,7 +417,6 @@ class InstallArea(object):
             installed = True
         return installed
 
-
     def _listInstalledPackages(self):
         """ Checks whether a given RPM apckage is already installed """
         rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-qa',  '--queryformat',  '%{NAME} %{VERSION} %{RELEASE}\n'  ]
@@ -443,7 +429,6 @@ class InstallArea(object):
 
         if rc != 0:
             raise LbInstallException("Error reading the list of packages from RPM DB")
-
         return [ l.split(" ") for l in out.splitlines() ]
 
     def _checkupdate(self):
@@ -453,7 +438,7 @@ class InstallArea(object):
             (name, version, release) = l
             # Creating a RPM requirement and checking whether we have a match...
             r = Requires(name, version, release, None, "GT", None)
-            update = self.lbYumClient.findPackageMatchingRequire(r)
+            update = self.lbYumClient.findLatestMatchingRequire(r)
             if update != None:
                 self.log.warning("%s.%s-%s could be updated to %s" % (name, version, release, update.rpmName()))
 
@@ -485,7 +470,7 @@ class InstallArea(object):
 
     def installRpm(self, rpmname, version=None, forceInstall=False):
         """ Install an RPM by name """
-        p = self.lbYumClient.getRPMPackage(rpmname, version)
+        p = self.lbYumClient.findLatestMatchingName(rpmname, version)
         if p == None:
             raise Exception("Package %s/%s not found" % (rpmname, version))
 
@@ -511,7 +496,6 @@ class InstallArea(object):
 
         # And installing
         self._installfiles(files, self.tmpdir, forceInstall)
-
 
     # Generators for the YumConfigurations
     ##########################################################################
@@ -629,11 +613,15 @@ class MainClient(object):
             if not self.dryrun:
                 # Initializing the install area
                 self.installArea = InstallArea(self.config)
-                # And actually running the method
-                runMethod(*runArgs)
+                # Find the method instance in the InstallArea
+                allmethods = inspect.getmembers(self.installArea, inspect.ismethod)
+                found = [ m[1] for m in allmethods if m[0] == runMethod ]
+                if len(found) != 1:
+                    raise LbInstallException("Could not find method %s in InstallArea" % runMethod)
+                # And invoke it...
+                found[0](*runArgs)
             else:
                 self.config.log.info("DRYRUN: %s %s" % (runMethod, " ".join(args)))
-
             self.postRun()
 
         except LbInstallException, lie:
@@ -684,12 +672,12 @@ class LbInstallClient(MainClient):
         if mode == LbInstallClient.MODE_RPM:
             # Mode that passes the arguments to the local RPM
             runMethod = "rpm"
-            runArgs = args[1:]
+            runArgs = [ args[1:] ]
         elif mode == LbInstallClient.MODE_LIST:
 
             # Mode that list packages according to a regexp
             runMethod = "listpackages"
-            runArgs = args[1:]
+            runArgs = [ args[1:] ]
         elif mode == LbInstallClient.MODE_INSTALLRPM:
             # Mode where the comamnds are installed by name
             rpmname = args[1]
@@ -697,8 +685,7 @@ class LbInstallClient(MainClient):
             if len(args) > 2:
                 version = args[2]
             runMethod = "installRpm"
-            runArgs = [rpmname, version ]
-
+            runArgs = [ [rpmname, version ] ]
         return (runMethod, runArgs)
 
     def postRun(self):
@@ -725,10 +712,7 @@ class InstallProjectClient(MainClient):
     def prepareRun(self, opts, args):
         """ Main method for the command """
 
-        runMethod = None
-        runArgs = []
         (pname, pversion, pconfig) = (None, None, None)
-
         # Check options to see whether we need the binary packages
         if opts.binary != None:
             pconfig = opts.binary
@@ -770,7 +754,6 @@ def selectClient(args):
         cmdlist = [cmd for cmd in args if cmd in LbInstallClient.MODES]
         if len(cmdlist) == 0:
             client = InstallProjectClient
-
     return client
 
 # Usage for the script
@@ -801,4 +784,4 @@ Pass through mode where the command is delegated to YUM (with the correct DB)
 if __name__ == "__main__":
     client = selectClient(sys.argv)
     sys.exit(client().main())
-
+    
