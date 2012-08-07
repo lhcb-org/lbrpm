@@ -7,7 +7,7 @@ Ben Couturier <ben.couturier@cern.ch>
 Version 1.0
 
 """
-import getopt
+import optparse
 import logging
 import os
 import subprocess
@@ -18,6 +18,17 @@ from string import Template
 
 __RCSID__ = "$Id$"
 
+# Constants for the dir names
+SVAR = "var"
+SLIB = "lib"
+SRPM = "rpm"
+SETC = "etc"
+STMP = "tmp"
+SUSR = "usr"
+SBIN = "bin"
+
+# Default repository URL
+REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm"
 
 # Checking whether the MYSITEROOT is set correctly
 ###############################################################################
@@ -26,12 +37,9 @@ class LbInstallConfig(object):
     should be kept in an instance of this class """
 
     def __init__(self):
-        """ Constructor for the config oobject """
-        # Check the mysiteroot
-        if not os.environ.has_key("MYSITEROOT"):
-            raise LbInstallException("Missing MYSITEROOT variable in the environment.")
-        else:
-            self.siteroot = os.environ["MYSITEROOT"]
+        """ Constructor for the config object """
+        # Get the default siteroot
+        self.siteroot = os.environ.get("MYSITEROOT", None)
 
         # Debug mode defaults to false
         self.debug = False
@@ -43,27 +51,30 @@ class LbInstallConfig(object):
         # version of teh script itself
         self.script_version = '120419'
         # Simple logger by default
-        self.log = logging.getLogger()
+        self.log = None
 
 
     def setLogger(self):
         """ Defines a custom logger """
+        if self.log != None:
+            return self.log
+
         # Setting the logger
         thelog = logging.getLogger()
-        thelog.setLevel(logging.DEBUG)
-        console = logging.StreamHandler()
-        if self.python_version < (2, 5, 1) :
-            console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
-        else :
-            if self.debug:
-                console.setFormatter(logging.Formatter("%(levelname)-8s: %(funcName)-25s - %(message)s"))
-            else :
-                console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
+#        thelog.setLevel(logging.DEBUG)
+#        console = logging.StreamHandler()
+#        if self.python_version < (2, 5, 1) :
+#            console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
+#        else :
+#            if self.debug:
+#                console.setFormatter(logging.Formatter("%(levelname)-8s: %(funcName)-25s - %(message)s"))
+#            else :
+#                console.setFormatter(logging.Formatter("%(levelname)-8s: %(message)s"))
         if self.debug:
-            console.setLevel(logging.DEBUG)
+            thelog.setLevel(logging.DEBUG)
         else :
-            console.setLevel(logging.INFO)
-        thelog.addHandler(console)
+            thelog.setLevel(logging.INFO)
+  #      thelog.addHandler(console)
         self.log = thelog
         return thelog
 
@@ -114,51 +125,6 @@ def printTrailer(config):
     thelog.info(('<<< %s - End of lb-install.py %s >>>' % (end_time, config.script_version)).center(config.line_size))
     thelog.info('=' * config.line_size)
 
-
-# Checking the command line options
-###############################################################################
-def parseArgs(config):
-    """ Process the command line arguments """
-    pname = None
-    pversion = None
-    binary = None
-
-    arguments = sys.argv[1:]
-
-    if not arguments :
-        raise LbInstallException("Not enough arguments passed")
-
-    try:
-        opts, args = getopt.getopt(arguments, 'hdb',
-            ['help', 'debug', 'binary=', 'repo='])
-    except getopt.GetoptError, err:
-        raise LbInstallException("Error parsing arguments: " + str(err))
-
-
-    for key, value in opts:
-        if key in ('-d', '--debug'):
-            config.debug = True
-        if key in ('-h', '--help'):
-            usage(sys.argv[0])
-        if key == '-b':
-            binary = os.environ.get('CMTCONFIG', None)
-            if binary == None:
-                raise LbInstallException("CMTCONFIG environment variable must be defined if -b is used")
-        if key == '--binary':
-            binary = value
-        if key == '--repo':
-            config.repourl = value
-
-    if not pname and len(args) > 0 :
-        pname = args[0]
-    if pname and pname.find("/") != -1 :
-        plist = pname.split("/")
-        pname = "/".join(plist[1:])
-
-    if not pversion and len(args) > 1 :
-        pversion = args[1]
-
-    return pname, pversion, binary
 
 
 # Class representing the repository
@@ -265,19 +231,19 @@ class InstallArea(object):
             os.makedirs(self.etc)
         if not os.path.exists(self.yumconf):
             ycf = open(self.yumconf, 'w')
-            ycf.write(_getYumConf(self.siteroot))
+            ycf.write(InstallArea._getYumConf(self.siteroot))
             ycf.close()
 
         if not os.path.exists(self.yumreposd):
             os.makedirs(self.yumreposd)
         if not os.path.exists(self.yumrepolhcb):
             yplf = open(self.yumrepolhcb, 'w')
-            yplf.write(_getYumRepo(self.siteroot, "lhcbold", self.rpmsurl))
-            yplf.write(_getYumRepo(self.siteroot, "lhcb", self.lhcbsurl))
+            yplf.write(InstallArea._getYumRepo(self.siteroot, "lhcbold", self.rpmsurl))
+            yplf.write(InstallArea._getYumRepo(self.siteroot, "lhcb", self.lhcbsurl))
             yplf.close()
         if not os.path.exists(self.yumrepolcg):
             yplf = open(self.yumrepolcg, 'w')
-            yplf.write(_getYumRepo(self.siteroot, "lcg", self.lcgsurl))
+            yplf.write(InstallArea._getYumRepo(self.siteroot, "lcg", self.lcgsurl))
             yplf.close()
 
     def _checkPrerequisites(self):
@@ -547,11 +513,12 @@ class InstallArea(object):
         self._installfiles(files, self.tmpdir, forceInstall)
 
 
-# Generators for the YumConfigurations
-##########################################################################
-def _getYumConf(siteroot):
-    """ Builds the Yum configuration from template """
-    cfile = Template("""
+    # Generators for the YumConfigurations
+    ##########################################################################
+    @classmethod
+    def _getYumConf(cls, siteroot):
+        """ Builds the Yum configuration from template """
+        cfile = Template("""
 [main]
 #CONFVERSION 0001
 cachedir=/var/cache/yum
@@ -566,21 +533,245 @@ plugins=1
 gpgcheck=0
 installroot=${siteroot}
 reposdir=/etc/yum.repos.d
-""").substitute(siteroot=siteroot)
-    return cfile
+    """).substitute(siteroot=siteroot)
+        return cfile
 
-def _getYumRepo(siteroot, name, url):
-    """ Builds the Yum repository configuration from template """
-    cfile = Template("""
+    @classmethod
+    def _getYumRepo(cls, siteroot, name, url):
+        """ Builds the Yum repository configuration from template """
+        cfile = Template("""
 [$name]
 #REPOVERSION 0001
 name=$name
 baseurl=$url
 enabled=1
+    """).substitute(siteroot=siteroot, url=url, name=name)
+        return cfile
 
-""").substitute(siteroot=siteroot, url=url, name=name)
-    return cfile
+# Class for known install exceptions
+###############################################################################
+class LbInstallException(Exception):
+    """ Custom exception for lb-install """
 
+    def __init__(self, msg):
+        """ Constructor for the exception """
+        super(LbInstallException, self).__init__(msg)
+
+# Classes and method for command line parsing
+###############################################################################
+class LbInstallOptionParser(optparse.OptionParser):
+    """ Custom OptionParser to intercept the errors and rethrow
+    them as lbInstallExceptions """
+
+    def error(self, msg):
+        raise LbInstallException("Error parsing arguments: " + str(msg))
+
+    def exit(self, status=0, msg=None):
+        raise LbInstallException("Error parsing arguments: " + str(msg))
+
+class MainClient(object):
+    """ Ancestor for both clients, the new one and the one
+    compatible with install project arguments """
+    def __init__(self, arguments=None, dryrun=False):
+        """ Common setup for both clients """
+        self.config = LbInstallConfig()
+        self.arguments = arguments
+        self.dryrun = dryrun
+
+        parser = LbInstallOptionParser()
+        parser.add_option('-d', '--debug',
+                            dest="debug",
+                            default=False,
+                            action="store_true",
+                            help="Show debug information")
+        parser.add_option('--repo',
+                            dest="repository",
+                            default=None,
+                            action="store",
+                            help="Specify repository URL")
+        parser.add_option('--root',
+                            dest="siteroot",
+                            default=None,
+                            action="store",
+                            help="Specify MYSITEROOT on the command line")
+        parser.add_option('--dryrun',
+                            dest="dryrun",
+                            default=False,
+                            action="store",
+                            help="Only print the command that will be run")
+        self.parser = parser
+
+    def run(self, opts, args):
+        """ Actually run the command """
+        raise NotImplementedError()
+
+    def main(self):
+        """ Main method for the ancestor:
+        call parse and run in sequence """
+        rc = 0
+        try:
+            opts, args = self.parser.parse_args(self.arguments)
+            # Setting the default command line parameter
+            # to choose the siteroot
+            if opts.siteroot != None:
+                self.config.siteroot = opts.siteroot
+            # Now setting the logging depending on debug mode...
+            self.config.setLogger()
+
+            # Checking if we should do a dry-run
+            self.dryrun = self.dryrun or opts.dryrun
+
+            # Getting the function to be invoked
+            (runMethod, runArgs) = self.prepareRun(opts, args)
+            self.runMethod = runMethod
+            self.runArgs = runArgs
+
+            if not self.dryrun:
+                # Initializing the install area
+                self.installArea = InstallArea(self.config)
+                # And actually running the method
+                runMethod(*runArgs)
+            else:
+                self.config.log.info("DRYRUN: %s %s" % (runMethod, " ".join(args)))
+
+            self.postRun()
+
+        except LbInstallException, lie:
+            print >> sys.stderr, "ERROR: " + str(lie)
+            usage(sys.argv[0])
+            rc = 1
+        except:
+            print >> sys.stderr, "Exception in lb-install:"
+            print >> sys.stderr, '-'*60
+            traceback.print_exc(file=sys.stderr)
+            print >> sys.stderr, '-'*60
+            rc = 1
+        return rc
+
+class LbInstallClient(MainClient):
+    """ Client following new syntax """
+
+    MODE_INSTALLRPM = "installrpm"
+    MODE_RPM     = "rpm"
+    MODE_LIST    = "list"
+    MODES = [    MODE_INSTALLRPM, MODE_RPM, MODE_LIST ]
+
+    def __init__(self, arguments=None, dryrun=False):
+        super(LbInstallClient, self).__init__(arguments, dryrun)
+        self.parser.disable_interspersed_args()
+
+    def prepareRun(self, opts, args):
+        """ Main method for the command """
+
+        runMethod = None
+        runArgs = []
+
+        # Parsing first argument to check the mode
+        if len(args) > 0:
+            cmd = args[0].lower()
+            if  cmd == "rpm":
+                mode = LbInstallClient.MODE_RPM
+            elif cmd == "list":
+                mode = LbInstallClient.MODE_LIST
+            elif cmd == "install":
+                mode = LbInstallClient.MODE_INSTALLRPM
+            else:
+                raise LbInstallException("Unrecognized command: %s" % args)
+        else:
+            raise LbInstallException("Argument list too short")
+
+        # Now executing the command
+        if mode == LbInstallClient.MODE_RPM:
+            # Mode that passes the arguments to the local RPM
+            runMethod = "rpm"
+            runArgs = args[1:]
+        elif mode == LbInstallClient.MODE_LIST:
+
+            # Mode that list packages according to a regexp
+            runMethod = "listpackages"
+            runArgs = args[1:]
+        elif mode == LbInstallClient.MODE_INSTALLRPM:
+            # Mode where the comamnds are installed by name
+            rpmname = args[1]
+            version = None
+            if len(args) > 2:
+                version = args[2]
+            runMethod = "installRpm"
+            runArgs = [rpmname, version ]
+
+        return (runMethod, runArgs)
+
+    def postRun(self):
+        # No callback needed in this case
+        pass
+
+class InstallProjectClient(MainClient):
+    """ Backwards compatibility for install_project """
+
+    def __init__(self, arguments=None, dryrun=False):
+        super(InstallProjectClient, self).__init__(arguments, dryrun)
+        # Adding the binary option for install project compatibility
+        self.parser.add_option('--binary',
+                        dest="binary",
+                        default=None,
+                        action="store",
+                        help="Download binary package as well as source")
+        self.parser.add_option('-b',
+                        dest="useCMTCONFIG",
+                        default=False,
+                        action="store_true",
+                        help="Download binary package matching environment CMTCONFIG")
+
+    def prepareRun(self, opts, args):
+        """ Main method for the command """
+
+        runMethod = None
+        runArgs = []
+        (pname, pversion, pconfig) = (None, None, None)
+
+        # Check options to see whether we need the binary packages
+        if opts.binary != None:
+            pconfig = opts.binary
+        elif opts.useCMTCONFIG:
+            cmtconfig = os.environ.get('CMTCONFIG', None)
+            if cmtconfig != None:
+                pconfig = cmtconfig
+            else:
+                raise LbInstallException("CMTCONFIG environment variable must be defined if -b is used")
+
+        # Check the arguments to see if we have project/package and version
+        if len(args) == 0:
+            raise LbInstallException("Please specify project [version]")
+        else:
+            pname = args[0]
+        if len(args) > 1:
+            pversion = args[1]
+
+        # Starting normal install project output
+        printHeader(self.config)
+        log = self.config.log
+        log.info("Proceeding to the installation of %s/%s/%s" % (pname, pversion, pconfig))
+        # Creating the install area object
+        runMethod = "install"
+        runArgs = [ pname, pversion, pconfig ]
+        return (runMethod, runArgs)
+
+    def postRun(self):
+        """ Callback after actual execution """
+        printTrailer(self.config)
+
+def selectClient(args):
+    """ Chooses which client to select depending on coomand name and command line"""
+    client = LbInstallClient
+
+    if len(args) > 0 and args[0] == "install_project.py":
+        client = InstallProjectClient
+    else:
+        cmdlist = [cmd for cmd in args if cmd in LbInstallClient.MODES]
+        if len(cmdlist) == 0:
+            client = InstallProjectClient
+
+    return client
 
 # Usage for the script
 ###############################################################################
@@ -606,101 +797,8 @@ Pass through mode where the command is delegated to YUM (with the correct DB)
 
 """ % { "cmd" : cmd }
 
-
-# Class for known install exceptions
-###############################################################################
-class LbInstallException(Exception):
-    """ Custom exception for lb-install """
-
-    def __init__(self, msg):
-        """ Constructor for the exception """
-        super(LbInstallException, self).__init__(msg)
-
-
-# Main method for the tool
-###############################################################################
-MODE_INSTALL = "install"
-MODE_INSTALLRPM = "installrpm"
-MODE_RPM     = "rpm"
-MODE_LIST    = "list"
-
-# Constants for the dir names
-SVAR = "var"
-SLIB = "lib"
-SRPM = "rpm"
-SETC = "etc"
-STMP = "tmp"
-SUSR = "usr"
-SBIN = "bin"
-
-# Default repository URL
-REPOURL = "http://test-lbrpm.web.cern.ch/test-lbrpm"
-
-def main():
-    """ Main method for the command """
-    rc = 0
-    mode = MODE_INSTALL
-    try:
-        # Creating the config object
-        config = LbInstallConfig()
-
-        # Parsing first argument to check the mode
-        args = sys.argv
-        if len(args) > 1:
-            if args[1].lower() == "rpm":
-                mode = MODE_RPM
-            elif args[1].lower()== "list":
-                mode = MODE_LIST
-            elif args[1].lower() == "install":
-                mode = MODE_INSTALLRPM
-
-        # Now executing the command
-        if mode == MODE_RPM:
-            # Mode that passes the arguments to the local RPM
-            log = config.setLogger()
-            installArea = InstallArea(config)
-            rc = installArea.rpm(args[2:])
-        elif mode == MODE_LIST:
-            # Mode that list packages according to a regexp
-            log = config.setLogger()
-            installArea = InstallArea(config)
-            rc = installArea.listpackages(args[2:])
-        elif mode == MODE_INSTALLRPM:
-            # Mode where the comamnds are installed by name
-            log = config.setLogger()
-            installArea = InstallArea(config)
-            rpmname = args[2]
-            version = None
-            if len(args) > 3:
-                version = args[3]
-            rc = installArea.installRpm(rpmname, version)
-        else:
-            # In this case we are in normal install mode
-            pname, pversion, binary = parseArgs(config)
-
-            # Initializing the logger, Printing the log header
-            log = config.setLogger()
-            printHeader(config)
-
-            # Lg
-            log.info("Proceeding to the installation of %s/%s/%s" % (pname, pversion, binary))
-
-            # Creating the install area object
-            installArea = InstallArea(config)
-            installArea.install(pname, pversion, binary)
-            printTrailer(config)
-    except LbInstallException, lie:
-        print >> sys.stderr, "ERROR: " + str(lie)
-        usage(sys.argv[0])
-        rc = 1
-    except:
-        print >> sys.stderr, "Exception in lb-install:"
-        print >> sys.stderr, '-'*60
-        traceback.print_exc(file=sys.stderr)
-        print >> sys.stderr, '-'*60
-        rc = 1
-    return rc
-
+# Main just chooses the client and starts it
 if __name__ == "__main__":
-    sys.exit(main())
+    client = selectClient(sys.argv)
+    sys.exit(client().main())
 

@@ -365,8 +365,8 @@ class Repository(object):
             self.backend = backend
 
         # Setting up delegation
-        self.findPackageByName = self.backend.findPackageByName
-        self.findPackageMatchingRequire = self.backend.findPackageMatchingRequire
+        self.findLatestMatchingName = self.backend.findLatestMatchingName
+        self.findLatestMatchingRequire = self.backend.findLatestMatchingRequire
         self.getAllPackages = self.backend.getAllPackages
 
 
@@ -452,7 +452,7 @@ class RepositoryXMLBackend(object):
         """ Returns the ID for the data type as used in the repomd.xml file """
         return "primary"
 
-    def findPackageByName(self, name, version, release=None):
+    def findLatestMatchingName(self, name, version, release=None):
         """ Utility function to locate a package by name, returns the latest available version """
         package = None
         try:
@@ -477,7 +477,7 @@ class RepositoryXMLBackend(object):
 
         return package
 
-    def findPackageMatchingRequire(self, requirement):
+    def findLatestMatchingRequire(self, requirement):
         """ Utility function to locate a package providing a given functionality """
 
         log.debug("Looking for match for %s" % requirement)
@@ -686,7 +686,7 @@ class RepositorySQLiteBackend(object):
 
         self.mDBConnection = sql.connect(self.mPrimaryUncompressed)
 
-    def findPackageByName(self, name, version, release=None):
+    def findLatestMatchingName(self, name, version, release=None):
         """ Utility function to locate a package by name, returns the latest available version """
         package = None
         found = self._loadPackagesByName(name, version)
@@ -720,7 +720,7 @@ class RepositorySQLiteBackend(object):
         # Free resources
         cursor.close()
 
-    def findPackageMatchingRequire(self, requirement):
+    def findLatestMatchingRequire(self, requirement):
         """ Utility function to locate a package providing a given functionality """
 
         log.debug("Looking for match for %s" % requirement)
@@ -881,7 +881,7 @@ class LbYumClient(object):
     #
     # Public methods
     ###########################################################################
-    def getRPMPackage(self, name, version=None, release=None):
+    def findLatestMatchingName(self, name, version=None, release=None):
         """ Main method for locating packages by RPM name"""
         allfound = []
         package = None
@@ -889,7 +889,7 @@ class LbYumClient(object):
         # Looking for matches in all repos
         for r in self.repositories.values():
             log.debug("Searching RPM %s/%s/%s in %s" % (name, version, release, r.name))
-            res = r.findPackageByName(name, version, release)
+            res = r.findLatestMatchingName(name, version, release)
             if res != None:
                 allfound.append(res)
 
@@ -900,7 +900,7 @@ class LbYumClient(object):
 
         return package
 
-    def listRPMPackages(self, nameRegexp=None, versionRegexp=None, releaseRegexp=None):
+    def listPackages(self, nameRegexp=None, versionRegexp=None, releaseRegexp=None):
         """ List packages available"""
         # Looking for matches in all repos
         for r in self.repositories.values():
@@ -917,14 +917,14 @@ class LbYumClient(object):
                     if namematch and versionmatch and releasematch:
                         yield p
 
-    def findPackageMatchingRequire(self, requirement):
+    def findLatestMatchingRequire(self, requirement):
         """ Main method for locating packages by RPM name"""
         allmatching = []
         matchingPackage = None
 
         # Looking for matches in all repos
         for r in self.repositories.values():
-            m = r.findPackageMatchingRequire(requirement)
+            m = r.findLatestMatchingRequire(requirement)
             if m != None:
                 allmatching.append(m)
 
@@ -958,7 +958,7 @@ class LbYumClient(object):
             (reqPackage, reqVersion, reqRelease) = (r.name, r.version, r.release)
             if reqPackage not in IGNORED_PACKAGES:
                 log.debug("Processing deps %s.%s-%s" % (reqPackage, reqVersion, reqRelease))
-                p = self.findPackageMatchingRequire(r)
+                p = self.findLatestMatchingRequire(r)
 
                 # Check for circular dependencies using the set passed
                 if p in alreadyprocessed:

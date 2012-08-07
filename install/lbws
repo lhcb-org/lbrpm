@@ -5,13 +5,24 @@ if [ -z $MYSITEROOT ]; then
    echo "Error - MYSITEROOT is not defined. Define it for installation root"
 fi
 
-#GITURL=http://cern.ch/lhcbproject/GIT/lbrpm.git
-GITURL=/afs/cern.ch/user/l/lben/public/lbrpmprod/
+# Checking if git is in the path
+git --version >/dev/null 2>&1
+OUT=$?
+if [ $OUT -eq 0 ]; then
+	echo "using git to bootstrap installation"
+else
+	echo "git not found. Cannot bootstrap installation"
+fi
 
+
+GITURL=http://cern.ch/lhcbproject/GIT/lb_install.git
+
+# Checking the siteroot directory
 if [ ! -e $MYSITEROOT ]; then
 	mkdir -p $MYSITEROOT
 fi
 
+# Now getting the latest version of the scripts
 cd $MYSITEROOT
 if [ -e $MYSITEROOT/.git ] ; then
 	git pull
@@ -21,6 +32,7 @@ else
 	git checkout prod -f
 fi
 
+# And delegating the command to lb_install.py
 python $MYSITEROOT/lb_install.py $*
 
 

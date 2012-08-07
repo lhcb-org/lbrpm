@@ -31,31 +31,31 @@ class TestRepository(unittest.TestCase):
 
     def testPackageMatching(self):
         r = Requires("TestPackage", "1.0.0", "1", None, "EQ", None)
-        p = self.lbYumClient.findPackageMatchingRequire(r)
+        p = self.lbYumClient.findLatestMatchingRequire(r)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.0.0")
 
     def testPackageByNameWithRelease(self):
-        p = self.lbYumClient.getRPMPackage("TP2", "1.2.5", "1")
+        p = self.lbYumClient.findLatestMatchingName("TP2", "1.2.5", "1")
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.2.5")
         self.assertEqual(p.release, "1")
 
     def testPackageByNameWithoutRelease(self):
-        p = self.lbYumClient.getRPMPackage("TP2", "1.2.5", None)
+        p = self.lbYumClient.findLatestMatchingName("TP2", "1.2.5", None)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.2.5")
         self.assertEqual(p.release, "2")
 
     def testPackageByNameWithoutVersion(self):
-        p = self.lbYumClient.getRPMPackage("TP2", None, None)
+        p = self.lbYumClient.findLatestMatchingName("TP2", None, None)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.2.5")
         self.assertEqual(p.release, "2")
 
 
     def testDependencyGreater(self):
-        p = self.lbYumClient.getRPMPackage("TP2", None, None)
+        p = self.lbYumClient.findLatestMatchingName("TP2", None, None)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.2.5")
         self.assertEqual(p.release, "2")
@@ -67,7 +67,7 @@ class TestRepository(unittest.TestCase):
 
 
     def testDependencyEqual(self):
-        p = self.lbYumClient.getRPMPackage("TP3", None, None)
+        p = self.lbYumClient.findLatestMatchingName("TP3", None, None)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.18.22")
         self.assertEqual(p.release, "2")
@@ -79,7 +79,7 @@ class TestRepository(unittest.TestCase):
 
 
     def testCyclicDependency(self):
-        p = self.lbYumClient.getRPMPackage("TCyclicDep", None, None)
+        p = self.lbYumClient.findLatestMatchingName("TCyclicDep", None, None)
         self.assertNotEqual(p, None)
         self.assertEqual(p.version, "1.0.0")
         self.assertEqual(p.release, "1")
@@ -427,7 +427,7 @@ if __name__ == "__main__":
     #client = LbYumClient("/scratch/rpmsiteroot")
     #for p in client.listRPMPackages("glibc.*"):
     #    print "%s - %s" % (p.name, p.version)
-    #p = client.getRPMPackage("LBSCRIPTS")
+    #p = client.findLatestMatchingName("LBSCRIPTS")
     #print p
     #alldeps = client.getPackageDependencies(p)
     #for dep in alldeps:
@@ -437,7 +437,7 @@ if __name__ == "__main__":
     #for p in client.listRPMPackages("BRUNEL.*"):
     #    print "%s - %s" % (p.name, p.version)
 
-    #p = client.getRPMPackage("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
+    #p = client.findLatestMatchingName("BRUNEL_v42r2p1_x86_64_slc5_gcc43_opt", "1.0.0")
     #print p
     #alldeps = client.getPackageDependencies(p)
     #for dep in alldeps:
