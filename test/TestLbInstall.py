@@ -5,7 +5,7 @@ Created on Aug 6, 2012
 '''
 import os
 import unittest
-from lb_install import InstallProjectClient, LbInstallClient
+from lb_install import InstallProjectClient, LbInstallClient, selectClient
 
 
 class Test(unittest.TestCase):
@@ -36,15 +36,15 @@ class Test(unittest.TestCase):
         rc = client.main()
         self.assertEquals(rc, 0)
         self.assertEquals(client.runMethod, "rpm")
-        self.assertEquals(client.runArgs[0], "-ivh")
-        self.assertEquals(client.runArgs[1], "testrpm")
+        self.assertEquals(client.runArgs[0][0], "-ivh")
+        self.assertEquals(client.runArgs[0][1], "testrpm")
 
     def testLbInstallClientList(self):
         client = LbInstallClient(["list", "BRUNEL"], True)
         rc = client.main()
         self.assertEquals(rc, 0)
         self.assertEquals(client.runMethod, "listpackages")
-        self.assertEquals(client.runArgs[0], "BRUNEL")
+        self.assertEquals(client.runArgs[0], [ "BRUNEL" ])
 
     def testLbInstallClientInstallRpm(self):
         client = LbInstallClient(["install", "BRUNEL"], True)
@@ -52,10 +52,12 @@ class Test(unittest.TestCase):
         self.assertEquals(rc, 0)
         self.assertEquals(client.runMethod, "installRpm")
         self.assertEquals(client.runArgs[0], "BRUNEL")
+        self.assertEquals(client.runArgs[1], None)
+
 
     def testInstallProjectClientBin(self):
         os.environ['CMTCONFIG'] = "MYCONFIG"
-        client = InstallProjectClient(["-b", "BRUNEL"], True)
+        client = InstallProjectClient(["-d", "-b", "BRUNEL"], True)
         rc = client.main()
         self.assertEquals(rc, 0)
         self.assertEquals(client.runMethod, "install")
@@ -100,15 +102,25 @@ class Test(unittest.TestCase):
         self.assertEquals(client.runArgs[1], "vXrY")
         self.assertEquals(client.runArgs[2], None)
 
-        print client.runArgs
+    def testSelectClient1(self):
+        args = [ "-d", "install", "toto"]
+        c = selectClient(args)
+        self.assertEquals(c, LbInstallClient)
 
+    def testSelectClient2(self):
+        args = [ "--root=foobar", "rpm", "toto"]
+        c = selectClient(args)
+        self.assertEquals(c, LbInstallClient)
 
+    def testSelectClient3(self):
+        args = [ "--root=foobar", "list", "toto"]
+        c = selectClient(args)
+        self.assertEquals(c, LbInstallClient)
 
-    def testConfigCreation(self):
-        import tempfile
-        import shutil
-        tmpdir = tempfile.mkdtemp()
-        # XXX
+    def testSelectClient4(self):
+        args = [ "--root=foobar", "-d", "-b", "Brunel"]
+        c = selectClient(args)
+        self.assertEquals(c, InstallProjectClient)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testOptions']

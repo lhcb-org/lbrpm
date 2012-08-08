@@ -5,12 +5,12 @@ Command to convert a LHCb project tar ball in a RPM file
 
 import logging
 import os
-import re
 import subprocess
 import sys
 import RpmHelpers
 import BuildDirHelpers
-from LbConfiguration.Package import getPackage
+
+__RCSID__ = "$Id"
 
 log = logging.getLogger()
 log.addHandler(logging.StreamHandler())
@@ -22,6 +22,7 @@ os.environ['PATH'] =  os.pathsep.join([os.environ['PATH'], local_directory])
 # Util method to prepare the command
 ################################################################################
 def addDefine(param, val):
+    """ Util method to add a define statement"""
     if val == None or val == '':
         val = '""'
     return " --define '%s %s' " % (param, val)
@@ -30,6 +31,7 @@ def addDefine(param, val):
 # Checking arguments
 ################################################################################
 def usage():
+    """ Display help"""
     print >> sys.stderr, "Usage: %s releasedir" % sys.argv[0]
     sys.exit(2)
 

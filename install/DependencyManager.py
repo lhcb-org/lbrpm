@@ -25,13 +25,16 @@ import urllib
 
 # Constants for directory structure
 SVAR = "var"
-SCACHE="cache"
-SLBYUM ="lbyum"
+SCACHE = "cache"
+SLBYUM = "lbyum"
 SETC = "etc"
-SLBYUMCONF="lbyum.conf"
+SLBYUMCONF = "lbyum.conf"
 
 # List of packages to ignore for our case
-IGNORED_PACKAGES = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)", "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
+IGNORED_PACKAGES = ["rpmlib(CompressedFileNames)", "/bin/sh", "rpmlib(PayloadFilesHavePrefix)",
+                    "rpmlib(PartialHardlinkSets)", "DBASE_Gen_DecFiles"]
+
+__RCSID__ = "$Id$"
 
 # Setting up the logger
 log = logging.getLogger()
@@ -52,15 +55,20 @@ class VersionedObject(object):
 
     # version comparison methods
     ###############################################################################
-    def eq(self, x):
+    def eq(self, x): # IGNORE:C0103
+        """ Custom operator """
         return self == x
-    def lt(self, x):
+    def lt(self, x): # IGNORE:C0103
+        """ Custom operator """
         return x < self
-    def le(self, x):
+    def le(self, x): # IGNORE:C0103
+        """ Custom operator """
         return x <= self
-    def gt(self, x):
+    def gt(self, x): # IGNORE:C0103
+        """ Custom operator """
         return x > self
-    def ge(self, x):
+    def ge(self, x): # IGNORE:C0103
+        """ Custom operator """
         return x >= self
 
     @classmethod
@@ -86,7 +94,7 @@ class VersionedObject(object):
     def cmpStandardVersion(cls, v1, v2):
         """ Common method for comparing standard versions as arrays of numbers """
         zippedVers = zip(v1, v2)
-        cmplist = [  a-b for (a,b) in zippedVers if a-b != 0]
+        cmplist = [  a - b for (a, b) in zippedVers if a - b != 0]
         if len(cmplist) == 0:
             return 0
         else:
@@ -103,7 +111,7 @@ class VersionedObject(object):
 
         allmethods = inspect.getmembers(self, predicate=inspect.ismethod)
         foundMethod = None
-        for m in allmethods:
+        for m in allmethods: #IGNORE:C0103
             if m[0].lower() == self.flags.lower():
                 foundMethod = m[1]
 
@@ -148,7 +156,7 @@ class VersionedObject(object):
     ###############################################################################
     def __str__(self):
         """ Display function for the package instance """
-        return "%s(%s.%s-%s)" %(self.flags, self.name, self.version, self.release)
+        return "%s(%s.%s-%s)" % (self.flags, self.name, self.version, self.release)
 
     def __repr__(self):
         return self.__str__()
@@ -172,12 +180,12 @@ class Requires(VersionedObject):
 
 # Package: Class representing a package available for installation
 ###############################################################################
-class Package(VersionedObject):
-
+class Package(VersionedObject): #IGNORE:R0902
+    """ Class representing an RPM package in the repository """
     #
     # Constructor and public method
     ###########################################################################
-    def __init__(self, name=None, version=None, release=None, epoch=None, flags=None,
+    def __init__(self, name=None, version=None, release=None, epoch=None, flags=None, #IGNORE:R0913
                  group=None, arch=None, location=None, provides=None, requires=None):
         """ Default constructor """
         super( Package, self ).__init__(name, version, release, epoch, flags)
@@ -195,15 +203,16 @@ class Package(VersionedObject):
         self.repository = None
 
     def setRepository(self, repo):
+        """ Sets the instance repository """
         self.repository = repo
 
     def rpmName(self):
         """ Formats the name of the RPM package"""
-        return "%s-%s-%s" %( self.name, self.version, self.release)
+        return "%s-%s-%s" % ( self.name, self.version, self.release)
 
     def rpmFileName(self):
         """ Formats the name of the RPM package"""
-        return "%s-%s-%s.rpm" %( self.name, self.version, self.release)
+        return "%s-%s-%s.rpm" % ( self.name, self.version, self.release)
 
     def url(self):
         """ Returns the URL to download the file """
@@ -217,15 +226,15 @@ class Package(VersionedObject):
 
     def __str__(self):
         """ Display function for the package instance """
-        tmpstr = "Package: %s-%s-%s\t%s" %( self.name, self.version, self.release, self.group)
+        tmpstr = "Package: %s-%s-%s\t%s" % ( self.name, self.version, self.release, self.group)
         if len(self.provides) > 0:
             tmpstr += "\nProvides:\n"
-            for p in self.provides:
-                tmpstr += "\t%s-%s-%s\n" % (p.name, p.version, p.release)
+            for pr in self.provides:
+                tmpstr += "\t%s-%s-%s\n" % (pr.name, pr.version, pr.release)
         if len(self.requires) > 0:
             tmpstr += "\nRequires:\n"
-            for p in self.requires:
-                tmpstr += "\t%s-%s-%s\t%s\n" % (p.name, p.version, p.release, p.flags)
+            for req in self.requires:
+                tmpstr += "\t%s-%s-%s\t%s\n" % (req.name, req.version, req.release, req.flags)
         return tmpstr
 
 #
@@ -254,6 +263,9 @@ class Repository(object):
         # Now initializing the backend
         self.availableBackends = backendList
         self.backend = None
+        self.findLatestMatchingName = None
+        self.findLatestMatchingRequire = None
+        self.getAllPackages = None
 
         # Loading the appropriate backend
         # if requested
@@ -273,29 +285,29 @@ class Repository(object):
 
         localmd  = self._getLocalMetadata()
         backend = None
-        for b in self.availableBackends:
-            log.info("Checking availability of interface: %s" % b.__name__)
+        for ba in self.availableBackends:
+            log.info("Checking availability of interface: %s" % ba.__name__)
             try:
                 try:
-                    (checksum, timestamp, filename) = remotemd[b.yumDataType()] #@UnusedVariable
+                    (checksum, timestamp, filename) = remotemd[ba.yumDataType()] #@UnusedVariable IGNORE:W0612
                 except KeyError:
-                    log.warning("Remote repository does not provide %s DB" % b.__name__)
+                    log.warning("Remote repository does not provide %s DB" % ba.__name__)
                     continue
 
                 # A priori we have a match (KeyError otherwise)
-                backend = b(self)
+                backend = ba(self)
                 self.backend = backend
                 ltimestamp = None
                 try:
-                    (lchecksum, ltimestamp, lfilename) =  localmd[b.yumDataType()] #@UnusedVariable
-                except:
+                    (lchecksum, ltimestamp, lfilename) =  localmd[ba.yumDataType()] #@UnusedVariable IGNORE:W0612
+                except: #IGNORE:W0702
                     pass
                     # Doesn't matter, we download DB in this case
 
                 if not self.backend.hasDB() or ltimestamp == None or timestamp > ltimestamp:
                     # We need to update the DB in this case
                     furl = self.repourl + "/" + filename
-                    log.info("Updating the RPM database for % s" % b.__name__)
+                    log.info("Updating the RPM database for % s" % ba.__name__)
                     self.backend.getLatestDB(furl)
                     # Now saving the metadata to the repomd file
                     ftmp = open(self.localRepomdXml, 'w')
@@ -305,9 +317,9 @@ class Repository(object):
                 # Loading data necessary for the backend
                 self.backend.load()
 
-            except:
+            except: #IGNORE:W0702
                 backend = None
-                log.warning("Error initializing %s backend - Trying next" % b.__name__)
+                log.warning("Error initializing %s backend - Trying next" % ba.__name__)
             # Stop at first one found
             if backend != None:
                 break
@@ -316,7 +328,7 @@ class Repository(object):
         if backend == None:
             raise Exception("No valid backend found")
         else:
-            log.info("Repository %s - Chosen backend: %s" % (self.name, b.__name__))
+            log.info("Repository %s - Chosen backend: %s" % (self.name, backend.mName))
             # Now initializing the methods delegated to the backend
             self.setBackend()
 
@@ -326,25 +338,26 @@ class Repository(object):
 
         localmd  = self._getLocalMetadata()
         backend = None
-        for b in self.availableBackends:
-            log.info("Checking availability of interface: %s" % b.__name__)
+        for ba in self.availableBackends:
+            log.info("Checking availability of interface: %s" % ba.__name__)
             try:
                 try:
-                    (checksum, timestamp, filename) = localmd[b.yumDataType()] #@UnusedVariable
+                    (checksum, timestamp, filename) = localmd[ba.yumDataType()] #@UnusedVariable IGNORE:W0612
                 except KeyError:
-                    log.warning("Repository %s - Local repository does not provide %s DB - Trying next" % (self.name, b.__name__))
+                    log.warning("Repository %s - Local repository does not provide %s DB - Trying next"
+                                % (self.name, ba.__name__))
                     continue
 
                 # A priori we have a match (KeyError otherwise)
-                backend = b(self)
+                backend = ba(self)
                 self.backend = backend
                 # Loading data necessary for the backend
                 self.backend.load()
 
-            except Exception, e:
+            except Exception, e: # IGNORE:W0703
                 backend = None
                 log.warning("Repository %s - Error: %s" % (self.name, str(e)))
-                log.warning("Repository %s - Error initializing %s backend - Trying next" % (self.name, b.__name__))
+                log.warning("Repository %s - Error initializing %s backend - Trying next" % (self.name, ba.__name__))
             # Stop at first one found
             if backend != None:
                 break
@@ -353,7 +366,7 @@ class Repository(object):
         if backend == None:
             raise Exception("No valid backend found")
         else:
-            log.info("Repository %s - Chosen backend: %s" % (self.name, b.__name__))
+            log.info("Repository %s - Chosen backend: %s" % (self.name, backend.mName))
             # Now initializing the methods delegated to the backend
             self.setBackend()
 
@@ -396,22 +409,23 @@ class Repository(object):
             ftmp.close()
         return ret
 
-    def _checkRepoMD(self, repomdxml):
+    @classmethod
+    def _checkRepoMD(cls, repomdxml):
         """ Method to parse the Repository metadata XML file """
         dom = xml.dom.minidom.parseString(repomdxml)
         dbTimestamps = {}
-        for n in dom.documentElement.childNodes:
-            if n.nodeType == xml.dom.Node.ELEMENT_NODE and n.tagName=="data":
+        for nd in dom.documentElement.childNodes:
+            if nd.nodeType == xml.dom.Node.ELEMENT_NODE and nd.tagName == "data":
                 checksum = None
                 timestamp = None
                 location = None
-                fileType = n.getAttribute("type")
-                for nc in n.childNodes:
-                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="checksum":
-                        checksum = RepositoryXMLBackend._getNodeText(nc)
-                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="timestamp":
-                        timestamp = RepositoryXMLBackend._getNodeText(nc)
-                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName=="location":
+                fileType = nd.getAttribute("type")
+                for nc in nd.childNodes:
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName == "checksum":
+                        checksum = RepositoryXMLBackend.getNodeText(nc)
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName == "timestamp":
+                        timestamp = RepositoryXMLBackend.getNodeText(nc)
+                    if nc.nodeType == xml.dom.Node.ELEMENT_NODE and nc.tagName == "location":
                         location = nc.getAttribute("href")
                 dbTimestamps[fileType] = (checksum, timestamp, location)
         return dbTimestamps
@@ -424,6 +438,7 @@ class RepositoryXMLBackend(object):
     """ Class interfacing with the XML interface provided by Yum repositories """
 
     def __init__(self, repository):
+        self.mName = "RepositoryXMLBackend"
         self.mPackages = {}
         self.mProvides = {}
         self.mPackageCount = 0
@@ -463,8 +478,8 @@ class RepositoryXMLBackend(object):
                     package = sorted(availableVersions)[-1]
                 else:
                     # Trying to match the requirements and what is available
-                    r = Requires(name, version, release)
-                    matching = [ p for p in availableVersions if r.provideMatches(p) ]
+                    req = Requires(name, version, release)
+                    matching = [ p for p in availableVersions if req.provideMatches(p) ]
                     if len(matching) > 0:
                         package = sorted(matching)[-1]
 
@@ -491,14 +506,16 @@ class RepositoryXMLBackend(object):
                 if (requirement.version == None or len(requirement.version)==0) and len(availableVersions) > 0:
                     availableVersions.sort()
                     # If no version is specified we just return the latest one
-                    log.debug("Found %d versions - returning latest: %s" % (len(availableVersions), availableVersions[-1] ))
+                    log.debug("Found %d versions - returning latest: %s"
+                              % (len(availableVersions), availableVersions[-1] ))
                     package = availableVersions[-1].package
                 else:
                     # Trying to match the requirements and what is available
                     matching = [ p for p in availableVersions if requirement.provideMatches(p) ]
                     if len(matching) > 0:
                         matching.sort()
-                        log.debug("Found %d version matching - returning latest: %s" % (len(matching),matching[-1] ))
+                        log.debug("Found %d version matching - returning latest: %s"
+                                  % (len(matching),matching[-1] ))
                         package = matching[-1].package
         except KeyError:
             log.debug("Could not find package providing %s-%s" % (requirement.name, requirement.version))
@@ -511,14 +528,14 @@ class RepositoryXMLBackend(object):
         """ Yields the list of all packages known by the repository """
         for pak_list_k in self.mPackages.keys():
             if nameMatch == None or (nameMatch != None and re.match(nameMatch, pak_list_k) != None):
-                for p in self.mPackages[pak_list_k]:
-                    yield p
+                for pa in self.mPackages[pak_list_k]:
+                    yield pa
 
     #
     # Methods for XML parsing and data loading
     ###########################################################################
     @classmethod
-    def _fromYumXML(cls, packageNode):
+    def _fromYumXML(cls, packageNode): #IGNORE:R0912
         """ Method that instantiates a correct package instance, based on
         the YUM Metadata XML structure"""
 
@@ -531,9 +548,9 @@ class RepositoryXMLBackend(object):
             if cn.nodeType != xml.dom.Node.ELEMENT_NODE:
                 continue
             if cn.tagName == "name":
-                lp.name = RepositoryXMLBackend._getNodeText(cn)
+                lp.name = RepositoryXMLBackend.getNodeText(cn)
             elif cn.tagName == "arch":
-                lp.arch = RepositoryXMLBackend._getNodeText(cn)
+                lp.arch = RepositoryXMLBackend.getNodeText(cn)
             elif cn.tagName == "version":
                 lp.version = cn.getAttribute("ver")
                 lp.release = cn.getAttribute("rel")
@@ -545,7 +562,7 @@ class RepositoryXMLBackend(object):
                     if fnode.nodeType != xml.dom.Node.ELEMENT_NODE:
                         continue
                     if fnode.tagName == "rpm:group":
-                        lp.group =  RepositoryXMLBackend._getNodeText(fnode)
+                        lp.group =  RepositoryXMLBackend.getNodeText(fnode)
                     if fnode.tagName == "rpm:provides":
                         for dep in fnode.childNodes:
                             if dep.nodeType != xml.dom.Node.ELEMENT_NODE:
@@ -576,43 +593,43 @@ class RepositoryXMLBackend(object):
         return lp
 
     @classmethod
-    def _getNodeText(cls, node):
+    def getNodeText(cls, node):
         """ Gets the value of the first child text node """
-        for t in node.childNodes:
-            if t.nodeType == xml.dom.Node.TEXT_NODE:
-                return t.data
+        for tn in node.childNodes:
+            if tn.nodeType == xml.dom.Node.TEXT_NODE:
+                return tn.data
 
     def _loadYumMetadataFile(self, filename):
         """ Loads the yum XML package list """
-        f = gzip.open(filename, 'rb')
+        fi = gzip.open(filename, 'rb')
         try:
             log.debug("Starting the parsing of the Metadata XML file")
-            dom = xml.dom.minidom.parse(f)
+            dom = xml.dom.minidom.parse(fi)
             log.debug("Parsing of the Metadata XML file done")
             self._loadYumMetadataDOM(dom)
         except Exception, e:
             log.error("Error while parsing file %s: %s" % (filename, str(e)))
             raise e
-        f.close()
+        fi.close()
 
     def _loadYumMetadataDOM(self, dom):
         """ Loads the yum XML package list """
         # Finding all packages and adding then to the repository
         log.debug("Starting to iterate though Metadata DOM")
-        for n in dom.documentElement.childNodes:
-            if n.nodeType == xml.dom.Node.ELEMENT_NODE:
+        for nd in dom.documentElement.childNodes:
+            if nd.nodeType == xml.dom.Node.ELEMENT_NODE:
                 # Generating the package object from the XML
-                p = RepositoryXMLBackend._fromYumXML(n)
-                p.setRepository(self.mRepository)
+                pa = RepositoryXMLBackend._fromYumXML(nd)
+                pa.setRepository(self.mRepository)
                 # Adding the package to the repository
-                self._addPackage(p)
-                self._addAllProvides(p)
-                self.mPackageCount+= 1
-                log.debug("Added %s package <%s><%s><%s>" % (p.group, p.name, p.version, p.release))
+                self._addPackage(pa)
+                self._addAllProvides(pa)
+                self.mPackageCount += 1
+                log.debug("Added %s package <%s><%s><%s>" % (pa.group, pa.name, pa.version, pa.release))
 
                 # Checking the Package type...
-                if n.getAttribute("type") != "rpm":
-                    log.warning("Package type for %s is %s not RPM" % (p.name, n.getAttribute("type")))
+                if nd.getAttribute("type") != "rpm":
+                    log.warning("Package type for %s is %s not RPM" % (pa.name, nd.getAttribute("type")))
 
         log.debug("Finished to iterate though Metadata DOM")
 
@@ -644,6 +661,7 @@ class RepositorySQLiteBackend(object):
     """ Class interfacing with the SQLite interface provided by Yum repositories """
 
     def __init__(self, repository):
+        self.mName = "RepositorySQLiteBackend"
         self.mDBName = "primary.sqlite.bz2"
         self.mDBNameUncompressed = "primary.sqlite"
         self.mPrimary = os.path.join(repository.cachedir, self.mDBName)
@@ -681,8 +699,8 @@ class RepositorySQLiteBackend(object):
         # Import the the package and open DB connection
         try:
             import sqlite3 as sql #@UnusedImport
-        except:
-            import sqlite as sql #@UnresolvedImport @Reimport
+        except: #IGNORE:W0702
+            import sqlite as sql #@UnresolvedImport @Reimport #IGNORE:F0401
 
         self.mDBConnection = sql.connect(self.mPrimaryUncompressed)
 
@@ -691,15 +709,15 @@ class RepositorySQLiteBackend(object):
         package = None
         found = self._loadPackagesByName(name, version)
         if len(found) > 0:
-            r = Requires(name, version, release)
-            matching = [p for p in found if r.provideMatches(p)]
+            req = Requires(name, version, release)
+            matching = [p for p in found if req.provideMatches(p)]
             if len(matching) > 0:
                 package = matching[-1]
         return package
 
     def getAllPackages(self, nameMatch=None):
         """ Yields the list of all packages known by the repository """
-        cursor=self.mDBConnection.cursor()
+        cursor = self.mDBConnection.cursor()
         # request to find the entry in the package table
         sq = """select pkgkey, name, version, release, epoch, rpm_group, arch, location_href
              from packages """
@@ -709,13 +727,13 @@ class RepositorySQLiteBackend(object):
         for (pkgkey, pname, version, release, epoch, rpm_group, arch, location_href) in res:
             # Creating the package object
             if nameMatch == None or (nameMatch != None and re.match(nameMatch, pname) != None):
-                p = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
+                pa = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
                 # Now getting the provides and requires
-                p.requires = self._loadRequiresByKey(pkgkey)
-                p.provides = self._loadProvidesByKey(pkgkey, p)
-                p.setRepository(self.mRepository)
+                pa.requires = self._loadRequiresByKey(pkgkey)
+                pa.provides = self._loadProvidesByKey(pkgkey, pa)
+                pa.setRepository(self.mRepository)
                 # Now yield this
-                yield(p)
+                yield(pa)
 
         # Free resources
         cursor.close()
@@ -744,8 +762,9 @@ class RepositorySQLiteBackend(object):
     # Utility methods
     ###########################################################################
     def _loadProvidesByKey(self, pkgkey, package):
+        """ Loads provide list given a package key """
         allprovides = []
-        cursorSub=self.mDBConnection.cursor()
+        cursorSub = self.mDBConnection.cursor()
         sqprov = "select name, flags, epoch, version, release from provides where pkgkey=?"
         resprov = cursorSub.execute(sqprov, [ pkgkey ])
         for (name, flags, epoch, version, release) in resprov:
@@ -755,8 +774,9 @@ class RepositorySQLiteBackend(object):
         return allprovides
 
     def _loadRequiresByKey(self, pkgkey):
+        """ Loads requires list given a package key """
         allrequires = []
-        cursorSub=self.mDBConnection.cursor()
+        cursorSub = self.mDBConnection.cursor()
         sqlreq = "select name, flags, epoch, version, release, pre from requires where pkgkey=?"
         respreq = cursorSub.execute(sqlreq, [ pkgkey ])
         for (name, flags, epoch, version, release, pre) in respreq:
@@ -770,10 +790,10 @@ class RepositorySQLiteBackend(object):
     def _findProvidesByName(self, name):
         """ Find all provides with a given name """
         allprovides = []
-        cursorSub=self.mDBConnection.cursor()
+        cursorSub = self.mDBConnection.cursor()
         sqprov = "select pkgkey, name, flags, epoch, version, release from provides where name=?"
         resprov = cursorSub.execute(sqprov, [ name ])
-        for (pkgkey, name, flags, epoch, version, release) in resprov: #@UnusedVariable
+        for (pkgkey, name, flags, epoch, version, release) in resprov: #@UnusedVariable IGNORE:W0612
             prov = Provides(name, version, release, epoch, flags, None)
             allprovides.append(prov)
         cursorSub.close()
@@ -782,7 +802,7 @@ class RepositorySQLiteBackend(object):
     def _loadPackagesByName(self, name, version=None):
         """ Lookup packages with a given name """
         allpackages = []
-        cursor=self.mDBConnection.cursor()
+        cursor = self.mDBConnection.cursor()
         # request to find the entry in the package table
         sq = """select pkgkey, name, version, release, epoch, rpm_group, arch, location_href
              from packages where name = ? """
@@ -795,21 +815,21 @@ class RepositorySQLiteBackend(object):
         # Getting the results
         for (pkgkey, pname, version, release, epoch, rpm_group, arch, location_href) in res:
             # Creating the package object
-            p = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
-            p.setRepository(self.mRepository)
+            pa = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
+            pa.setRepository(self.mRepository)
 
             # Now getting the provides and requires
-            p.requires = self._loadRequiresByKey(pkgkey)
-            p.provides = self._loadProvidesByKey(pkgkey, p)
+            pa.requires = self._loadRequiresByKey(pkgkey)
+            pa.provides = self._loadProvidesByKey(pkgkey, pa)
             #and append to thelist
-            allpackages.append(p)
+            allpackages.append(pa)
         cursor.close()
         return allpackages
 
     def _loadPackageProviding(self, provide):
         """ Lookup packages with a given name """
         allpackages = []
-        cursor=self.mDBConnection.cursor()
+        cursor = self.mDBConnection.cursor()
         # request to find the entry in the package table
         sq = """select p.pkgkey, p.name, p.version, p.release, p.epoch, p.rpm_group, p.arch, p.location_href
              from packages p, provides r
@@ -823,14 +843,14 @@ class RepositorySQLiteBackend(object):
         # Getting the results
         for (pkgkey, pname, version, release, epoch, rpm_group, arch, location_href) in res:
             # Creating the package object
-            p = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
-            p.setRepository(self.mRepository)
+            pa = Package(pname, version, release, epoch, None, rpm_group, arch, location_href)
+            pa.setRepository(self.mRepository)
 
             # Now getting the provides and requires
-            p.requires = self._loadRequiresByKey(pkgkey)
-            p.provides = self._loadProvidesByKey(pkgkey, p)
-            #and append to thelist
-            allpackages.append(p)
+            pa.requires = self._loadRequiresByKey(pkgkey)
+            pa.provides = self._loadProvidesByKey(pkgkey, pa)
+            #and append to the list
+            allpackages.append(pa)
         cursor.close()
         return allpackages
 
@@ -848,7 +868,7 @@ class RepositorySQLiteBackend(object):
 #
 ###############################################################################
 class LbYumClient(object):
-
+    """ Client class to be invoked to to query RPMs """
     def __init__(self, localConfigRoot, checkForUpdates=True, manualConfig = False):
         """ Constructor for the client """
         # Basic initializations
@@ -871,7 +891,7 @@ class LbYumClient(object):
 
         # At this point we have the repo names and URLs in self.repourls
         # we know connect to them to get the best method to get the appropriate files
-        self._initializeRepositories(repourls,checkForUpdates, [ RepositorySQLiteBackend, RepositoryXMLBackend ])
+        self._initializeRepositories(repourls, checkForUpdates, [ RepositorySQLiteBackend, RepositoryXMLBackend ])
 
     def addRepository(self, repository):
         """ Adds a repository manually, useful for testing """
@@ -887,9 +907,9 @@ class LbYumClient(object):
         package = None
 
         # Looking for matches in all repos
-        for r in self.repositories.values():
-            log.debug("Searching RPM %s/%s/%s in %s" % (name, version, release, r.name))
-            res = r.findLatestMatchingName(name, version, release)
+        for rep in self.repositories.values():
+            log.debug("Searching RPM %s/%s/%s in %s" % (name, version, release, rep.name))
+            res = rep.findLatestMatchingName(name, version, release)
             if res != None:
                 allfound.append(res)
 
@@ -903,19 +923,19 @@ class LbYumClient(object):
     def listPackages(self, nameRegexp=None, versionRegexp=None, releaseRegexp=None):
         """ List packages available"""
         # Looking for matches in all repos
-        for r in self.repositories.values():
-            for p in r.getAllPackages():
-                    namematch = True
-                    versionmatch = True
-                    releasematch = True
-                    if nameRegexp != None and re.match(nameRegexp, p.name) == None:
-                        namematch = False
-                    if versionRegexp != None and re.match(versionRegexp, p.name) == None:
-                        versionmatch = False
-                    if releaseRegexp != None and re.match(releaseRegexp, p.name) == None:
-                        releasematch = False
-                    if namematch and versionmatch and releasematch:
-                        yield p
+        for rep in self.repositories.values():
+            for pa in rep.getAllPackages():
+                namematch = True
+                versionmatch = True
+                releasematch = True
+                if nameRegexp != None and re.match(nameRegexp, pa.name) == None:
+                    namematch = False
+                if versionRegexp != None and re.match(versionRegexp, pa.name) == None:
+                    versionmatch = False
+                if releaseRegexp != None and re.match(releaseRegexp, pa.name) == None:
+                    releasematch = False
+                if namematch and versionmatch and releasematch:
+                    yield pa
 
     def findLatestMatchingRequire(self, requirement):
         """ Main method for locating packages by RPM name"""
@@ -923,10 +943,10 @@ class LbYumClient(object):
         matchingPackage = None
 
         # Looking for matches in all repos
-        for r in self.repositories.values():
-            m = r.findLatestMatchingRequire(requirement)
-            if m != None:
-                allmatching.append(m)
+        for rep in self.repositories.values():
+            ma = rep.findLatestMatchingRequire(requirement)
+            if ma != None:
+                allmatching.append(ma)
 
         # Sorting to get latest one
         allmatching.sort()
@@ -949,26 +969,26 @@ class LbYumClient(object):
         log.info("Checking dependencies for %s.%s-%s" % (package.name, package.version, package.release))
         return list(self._getpackageDeps(package, set()))
 
-
     def _getpackageDeps(self, package, alreadyprocessed):
+        """ Internal method to recurse on dependencies """
         # Now iterating on all requires to find the matching requirement
         alreadyprocessed.add(package)
         requiredlist = set()
-        for r in package.requires:
-            (reqPackage, reqVersion, reqRelease) = (r.name, r.version, r.release)
+        for req in package.requires:
+            (reqPackage, reqVersion, reqRelease) = (req.name, req.version, req.release)
             if reqPackage not in IGNORED_PACKAGES:
                 log.debug("Processing deps %s.%s-%s" % (reqPackage, reqVersion, reqRelease))
-                p = self.findLatestMatchingRequire(r)
+                pa = self.findLatestMatchingRequire(req)
 
                 # Check for circular dependencies using the set passed
-                if p in alreadyprocessed:
-                    log.warning("Cyclic dependency in repository with package: %s" % p.name)
+                if pa in alreadyprocessed:
+                    log.warning("Cyclic dependency in repository with package: %s" % pa.name)
                     continue
 
-                if p != None:
-                    requiredlist.add(p)
+                if pa != None:
+                    requiredlist.add(pa)
                     # Then adding the children...
-                    for subreq in self._getpackageDeps(p, alreadyprocessed):
+                    for subreq in self._getpackageDeps(pa, alreadyprocessed):
                         if subreq not in requiredlist:
                             requiredlist.add(subreq)
                 else:
@@ -984,39 +1004,39 @@ class LbYumClient(object):
         """ Look up the location of the yum repository """
         log.debug("Loading the configs from repository: %s" % self.yumreposdir)
 
-
-        for f in os.listdir(self.yumreposdir):
+        for fi in os.listdir(self.yumreposdir):
             # Checking that we have a file indeed, and if the name matches, parse the content
-            m = re.match("(.*)\.repo$", f)
-            if m != None:
-                repourls = self._parseRepoConfigFile(os.path.join(self.yumreposdir, f))
+            ma = re.match("(.*)\.repo$", fi)
+            if ma != None:
+                repourls = self._parseRepoConfigFile(os.path.join(self.yumreposdir, fi))
                 if len(repourls.keys()) == None:
-                    log.warning("Could not read repository URL from %s" % f)
+                    log.warning("Could not read repository URL from %s" % fi)
                 else:
-                    for (k,v) in repourls.items():
-                        self.repourls[k] = v
+                    for (key, val) in repourls.items():
+                        self.repourls[key] = val
 
         self.configured = True
-        # Checking whether we foiund any repositories at all
+        # Checking whether we found any repositories at all
         if len(self.repourls.keys())==0:
             raise Exception("Could not find repository config in %s" % self.yumreposdir)
 
         return self.repourls
 
-    def _parseRepoConfigFile(self, filename):
+    @classmethod
+    def _parseRepoConfigFile(cls, filename):
         """ Parses the xxxx.repo file and returns a map with reponame/repourl """
         log.debug("Opening config file for repo: %s" % filename)
         repourls = {}
-        currentSection=None
+        currentSection = None
         repourl = None
 
         ycf = open(filename, 'r')
-        for l in ycf.readlines():
+        for li in ycf.readlines():
             # Ignoring comment lines
-            if (re.match("\s*#.*", l) != None):
+            if (re.match("\s*#.*", li) != None):
                 continue
             # Look for the repository name (syntax: [name])
-            secm = re.match("\s*\[(.*)\]", l)
+            secm = re.match("\s*\[(.*)\]", li)
             if secm != None:
                 currentSection = secm.group(1)
                 log.debug("Found section: %s" % currentSection)
@@ -1026,9 +1046,9 @@ class LbYumClient(object):
             # If we are in a section of the conf file,
             # look for the baseurl attribute
             if currentSection != None:
-                m = re.match("\s*baseurl\s*=\s*(.*)\s*$", l)
-                if m != None:
-                    repourl = m.group(1)
+                ma = re.match("\s*baseurl\s*=\s*(.*)\s*$", li)
+                if ma != None:
+                    repourl = ma.group(1)
                     log.debug("Found repository: %s %s" % (currentSection, repourl))
                     repourls[currentSection] = repourl
                     # Only one base url per section...
@@ -1052,12 +1072,11 @@ class LbYumClient(object):
                 os.makedirs(repocachedir)
 
             try:
-                r = Repository(repo, repourl, repocachedir, knownBackends, True, checkForUpdates)
-                #r = Repository(repo, repourl, repocachedir, [  RepositoryXMLBackend ])
+                rep = Repository(repo, repourl, repocachedir, knownBackends, True, checkForUpdates)
                 log.debug("Repository %s created" % repo)
                 # Now adding the repository to the map
-                self.repositories[repo] = r
-            except Exception, e:
+                self.repositories[repo] = rep
+            except Exception, e: # IGNORE:W0703
                 log.error("ERROR - Banning repository %s: %s" % (repo, e))
 
 if __name__ == '__main__':
