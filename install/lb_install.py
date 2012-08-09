@@ -386,7 +386,7 @@ class InstallArea(object): # IGNORE:R0902
         return installed
 
     def _listInstalledPackages(self):
-        """ Checks whether a given RPM apckage is already installed """
+        """ Checks whether a given RPM package is already installed """
         rpmcmd = [ 'rpm',  '--dbpath', self.dbpath, '-qa',  '--queryformat',  '%{NAME} %{VERSION} %{RELEASE}\n'  ]
         self.log.debug("RPM command:" + " ".join(rpmcmd))
 
@@ -401,15 +401,28 @@ class InstallArea(object): # IGNORE:R0902
 
     def _checkupdate(self):
         """ Check whether packages could be updated in the repository """
-        from DependencyManager import Requires
-        for lp in self._listInstalledPackages():
-            (name, version, release) = lp
+        from DependencyManager import Requires, Provides
+ 
+        packageList = {}
+        for (name, version, release) in self._listInstalledPackages():
+            prov = Provides(name, version, release, None, "EQ")
+            namevers = packageList.get(name, list([]))
+            namevers.append(prov)
+            packageList[name] = namevers
+        
+        for name in packageList.keys():
+            # Only checking for updates of the last installed version
+            newest = sorted(packageList[name])[-1]
             # Creating a RPM requirement and checking whether we have a match...
-            req = Requires(name, version, release, None, "GT", None)
+            req = Requires(newest.name, newest.version, newest.release, None, "GT", None)
             update = self.lbYumClient.findLatestMatchingRequire(req)
             if update != None:
-                self.log.warning("%s.%s-%s could be updated to %s" % (name, version, release, update.rpmName()))
-
+                if self.config.noupdate:
+                    self.log.warning("%s.%s-%s could be updated to %s but update disabled" % (name, version, release, update.rpmName()))
+                else:
+                    self.log.warning("Updating %s.%s-%s to %s" % (name, version, release, update.rpmName()))
+                    self.installRpm(update.name, update.version, update.release)
+                
     # Methods to download/install RPMs (replacement for yum install)
     ##########################################################################
     def install(self, project, version, cmtconfig):
@@ -555,6 +568,12 @@ class MainClient(object):
                             default=False,
                             action="store",
                             help="Only print the command that will be run")
+        parser.add_option('--noupdate',
+                            dest="noupdate",
+                            default=False,
+                            action="store_true",
+                            help="Disable automatic updating of packages")
+
         self.parser = parser
 
     def main(self):
@@ -572,6 +591,8 @@ class MainClient(object):
             if opts.repourl != None:
                 self.config.repourl = opts.repourl
 
+            self.config.noupdate = opts.noupdate
+            
             # Now setting the logging depending on debug mode...
             if self.config.debug:
                 logging.basicConfig(format="%(levelname)-8s: %(funcName)-25s - %(message)s")
