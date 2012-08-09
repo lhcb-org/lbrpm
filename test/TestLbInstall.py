@@ -66,7 +66,8 @@ class Test(unittest.TestCase):
         self.assertEquals(client.runArgs[2], "MYCONFIG")
 
     def testInstallProjectClientBadBin(self):
-        del os.environ['CMTCONFIG']
+        if 'CMTCONFIG' in os.environ.keys():
+            del os.environ['CMTCONFIG']
         client = InstallProjectClient(["-b", "BRUNEL"], True)
         rc = client.main()
         self.assertEquals(rc, 1)
