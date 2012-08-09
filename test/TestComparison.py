@@ -45,12 +45,14 @@ class TestComparison(unittest.TestCase):
         p3 = Provides(name, "1.0.0", "1")
         p4 = Provides(name, "1.0.10.A", "1")
 
-        allvers = [p1, p2, p3, p4]
+        allvers = [p4, p1, p2, p3]
         sortedvers = sorted(allvers)
         print sortedvers
         self.assertEqual(sortedvers[0], p3)
         self.assertEqual(sortedvers[1], p2)
         self.assertEqual(sortedvers[2], p1)
+        self.assertEqual(sortedvers[3], p4)
+
 
     def testMatchEqual(self):
         name = "TestPackage"
@@ -164,5 +166,5 @@ class TestComparison(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testProvidesComparison']
+    import sys;sys.argv = ['', 'TestComparison.testProvidesComparisonAlpha']
     unittest.main()
