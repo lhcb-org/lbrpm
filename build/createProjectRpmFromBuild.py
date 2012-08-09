@@ -83,6 +83,9 @@ maj_version = 1
 min_version = 0
 patch_version = 0
 
+(lhcb_maj_version, lhcb_min_version, lhcb_patch_version) = RpmHelpers.parseVersion(version)
+
+
 if useVersion:
     (maj_version, min_version, patch_version) = RpmHelpers.parseVersion(version)
 
@@ -91,7 +94,6 @@ log.info("Found following CMTCONFIGS built: %s" % ",".join(allconfigs))
 allconfigs = ["x86_64-slc5-gcc43-opt"]
 
 for cmtconfig in allconfigs:
-
 
     cmd = "rpmbuild -v"
     cmd += addDefine("releasedir", releasedir)
@@ -108,6 +110,10 @@ for cmtconfig in allconfigs:
     cmd += addDefine("maj_version", maj_version)
     cmd += addDefine("min_version", min_version)
     cmd += addDefine("patch_version", patch_version)
+    cmd += addDefine("lhcb_maj_version", lhcb_maj_version)
+    cmd += addDefine("lhcb_min_version", lhcb_min_version)
+    cmd += addDefine("lhcb_patch_version", lhcb_patch_version)
+
     cmd += addDefine("packarch", "noarch")
 
     cmd += " -bb " + os.path.join(local_directory, "LHCb_BuiltProject.spectemplate")

@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import sys
-
+import RpmHelpers
 
 log = logging.getLogger()
 log.addHandler(logging.StreamHandler())
@@ -92,6 +92,8 @@ maj_version = 1
 min_version = 0
 patch_version = 0
 
+(lhcb_maj_version, lhcb_min_version, lhcb_patch_version) = RpmHelpers.parseVersion(version)
+
 if useVersion:
     m = re.match("v([\d]+)r([\d]+)$", version)
     if m != None:
@@ -125,7 +127,9 @@ cmd += addDefine("maj_version", maj_version)
 cmd += addDefine("min_version", min_version)
 cmd += addDefine("patch_version", patch_version)
 cmd += addDefine("packarch", "noarch")
-
+cmd += addDefine("lhcb_maj_version", lhcb_maj_version)
+cmd += addDefine("lhcb_min_version", lhcb_min_version)
+cmd += addDefine("lhcb_patch_version", lhcb_patch_version)
 
 cmd += " -bb " + os.path.join(local_directory, "LHCb_SourceProject.spectemplate")
 

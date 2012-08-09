@@ -94,7 +94,7 @@ def findCMTRequiredProjects(builddir):
     allprojects = []
     f = open(projectcmtname, "r")
     for l in f.readlines():
-        m = re.match("\s*use\s+([\w_]+)\s+([\w_]+)\s*", l)
+        m = re.match("\s*use\s+([\w_]+)\s+([\w_\£]+)\s*", l)
         if m!= None:
             allprojects.append((m.group(1), m.group(2)))
     return allprojects
@@ -111,7 +111,7 @@ def findCMTRequiredPackages(builddir):
         log.info("Processing requirement file: %s" % filename)
         f = open(filename, "r")
         for l in f.readlines():
-            m = re.match("\s*use\s+([\w_]+)\s+([\w_]+)\s*", l)
+            m = re.match("\s*use\s+([\w_]+)\s+([\w_\*]+)\s*", l)
             if m!= None:
                 allpackages.append((m.group(1), m.group(2)))
     return allpackages
