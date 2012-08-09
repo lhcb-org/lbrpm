@@ -44,6 +44,8 @@ class LbInstallConfig(object): #IGNORE:R0903
         self.repourl = REPOURL
         # Debug mode defaults to false
         self.debug = False
+        # No-update mode isn't default
+        self.noupdate = False
         # Version of the scripts
         self.script_version = "080812"
         # Default log width
@@ -254,7 +256,7 @@ class InstallArea(object): # IGNORE:R0902
             fini.write(time.strftime("%a, %d %b %Y %H:%M:%S", time.localtime()))
             fini.close()
         else:
-            self._checkupdate()
+            self._checkUpdates()
 
     # Pass through commands to RPM and lbYum
     ##########################################################################
@@ -263,7 +265,7 @@ class InstallArea(object): # IGNORE:R0902
         install_mode = False
         query_mode = False
         for arg in args:
-            if arg.startswith("-i"):
+            if arg.startswith("-i") or arg.startswith("-U"):
                 install_mode = True
             if arg.startswith("-q"):
                 query_mode = True
@@ -360,10 +362,12 @@ class InstallArea(object): # IGNORE:R0902
                 urllib.urlretrieve (pack.url(), full_filename)
         return files
 
-    def _installfiles(self, files, rpmloc, forceInstall=False):
+    def _installfiles(self, files, rpmloc, forceInstall=False, update=False):
         """ Install some rpm files given the location of the RPM DB """
         fulllist = [ os.path.join(rpmloc, f) for f in files ]
         args = [ "-ivh --oldpackage " ]
+        if update:
+            args = [ "-Uvh" ]
         if forceInstall:
             args.append("--force ")
         args = args + fulllist
@@ -399,30 +403,35 @@ class InstallArea(object): # IGNORE:R0902
             raise LbInstallException("Error reading the list of packages from RPM DB")
         return [ l.split(" ") for l in out.splitlines() ] #IGNORE:E1103
 
-    def _checkupdate(self):
+    def _checkUpdates(self):
         """ Check whether packages could be updated in the repository """
         from DependencyManager import Requires, Provides
- 
+        self.log.info("Checking for updates")
         packageList = {}
+        # First grouping by key/version to make sure we only try to update
+        # the newest installed
         for (name, version, release) in self._listInstalledPackages():
             prov = Provides(name, version, release, None, "EQ")
-            namevers = packageList.get(name, list([]))
+            key = "%s-%s" % (name, version)
+            namevers = packageList.get(key, list([]))
             namevers.append(prov)
-            packageList[name] = namevers
-        
-        for name in packageList.keys():
+            packageList[key] = namevers
+
+        for key in packageList.keys():
             # Only checking for updates of the last installed version
-            newest = sorted(packageList[name])[-1]
+            newest = sorted(packageList[key])[-1]
+            (name, version, release) = (newest.name, newest.version, newest.release)
             # Creating a RPM requirement and checking whether we have a match...
-            req = Requires(newest.name, newest.version, newest.release, None, "GT", None)
+            req = Requires(newest.name, newest.version, None, None, "EQ", None)
             update = self.lbYumClient.findLatestMatchingRequire(req)
-            if update != None:
+            if update != None and update > newest:
                 if self.config.noupdate:
-                    self.log.warning("%s.%s-%s could be updated to %s but update disabled" % (name, version, release, update.rpmName()))
+                    self.log.warning("%s.%s-%s could be updated to %s but update disabled"
+                                     % (name, version, release, update.rpmName()))
                 else:
                     self.log.warning("Updating %s.%s-%s to %s" % (name, version, release, update.rpmName()))
-                    self.installRpm(update.name, update.version, update.release)
-                
+                    self.installRpm(update.name, update.version, update.release, False, True)
+
     # Methods to download/install RPMs (replacement for yum install)
     ##########################################################################
     def install(self, project, version, cmtconfig):
@@ -449,15 +458,15 @@ class InstallArea(object): # IGNORE:R0902
         else:
             self.installPackage(package)
 
-    def installRpm(self, rpmname, version=None, forceInstall=False):
+    def installRpm(self, rpmname, version=None, release=None, forceInstall=False, update=False):
         """ Install an RPM by name """
-        pack = self.lbYumClient.findLatestMatchingName(rpmname, version)
+        pack = self.lbYumClient.findLatestMatchingName(rpmname, version, release)
         if pack == None:
-            raise Exception("Package %s/%s not found" % (rpmname, version))
+            raise Exception("InstallRPM: Package %s.%s-%s not found" % (rpmname, version, release))
 
-        self.installPackage(pack, forceInstall)
+        self.installPackage(pack, forceInstall, update)
 
-    def installPackage(self, package, forceInstall = False):
+    def installPackage(self, package, forceInstall = False, update = False):
         """ install a specific RPM, checking if not installed already """
         self.log.info("Installing %s and dependencies" % package.rpmName())
 
@@ -476,7 +485,7 @@ class InstallArea(object): # IGNORE:R0902
         files = self._downloadfiles(finstalllist, self.tmpdir)
 
         # And installing
-        self._installfiles(files, self.tmpdir, forceInstall)
+        self._installfiles(files, self.tmpdir, forceInstall, update)
 
     # Generators for the YumConfigurations
     ##########################################################################
@@ -592,7 +601,7 @@ class MainClient(object):
                 self.config.repourl = opts.repourl
 
             self.config.noupdate = opts.noupdate
-            
+
             # Now setting the logging depending on debug mode...
             if self.config.debug:
                 logging.basicConfig(format="%(levelname)-8s: %(funcName)-25s - %(message)s")
@@ -680,13 +689,14 @@ class LbInstallClient(MainClient):
             runMethod = "listpackages"
             runArgs = [ args[1:] ]
         elif mode == LbInstallClient.MODE_INSTALLRPM:
-            # Mode where the comamnds are installed by name
-            rpmname = args[1]
-            version = None
-            if len(args) > 2:
-                version = args[2]
+            # Mode where the RPMs are installed by name
+            # Fills in with None if the argumantes are none there,
+            # Only the name is mandatory
+            (rpmname, version, release) = args[1:4] + [ None ] * (4 - len(args))
+            if rpmname == None:
+                raise LbInstallException("Please specify at least the name of the RPM to install")
             runMethod = "installRpm"
-            runArgs =  [rpmname, version ]
+            runArgs =  [rpmname, version, release ]
         return (runMethod, runArgs)
 
     def postRun(self):

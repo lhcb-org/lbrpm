@@ -1,0 +1,61 @@
+
+%global __os_install_post /usr/lib/rpm/check-buildroot
+
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
+
+Name: %{name}
+Version: %{version}
+Release: %{release}
+Vendor: LHCb
+Summary: %{name}
+License: GPL
+Group: LHCbTEST
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{name}-buildroot
+BuildArch: noarch
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+
+%description
+%{name}
+
+%prep
+echo "Building TEST RPM <%{name}><%{version}><%{release}>"
+
+
+%build
+
+%install
+
+
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+mkdir %{name}_%{version}
+echo "%{name}_%{version}_%{release}" > %{name}_%{version}/content.txt
+
+%post
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+/opt/lhcb/lhcb/%{name}_%{version}
+
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+

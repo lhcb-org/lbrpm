@@ -10,8 +10,10 @@ from lb_install import InstallProjectClient, LbInstallClient
 
 class Test(unittest.TestCase):
 
-
     def setUp(self):
+        import logging
+        logging.basicConfig(format="%(levelname)-8s: %(message)s")
+        logging.getLogger().setLevel(logging.INFO)
         import tempfile
         self.siteroot=tempfile.mkdtemp()
         filename = os.path.join(os.path.dirname(__file__), "testyumrepo")
@@ -57,6 +59,35 @@ class Test(unittest.TestCase):
         self.assertEquals(rc, 0)
         for path in [ "lcg/external/castor/2.1.9-9/x86_64-slc5-gcc43-opt"]:
             self.assertTrue(os.path.exists(os.path.join(self.siteroot, path)))
+
+    def testConfigInstallOldReleaseAndUpgrade(self):
+        args = ["--root=%s" % self.siteroot, "--repo=%s" % self.repourl, "-d",  "install", "TestRPM1", "2.3.4", "1"]
+        client = LbInstallClient(args)
+        rc =  client.main()
+        self.assertEquals(rc, 0)
+        # package should be installed, checking that the file is correct
+        for path in [ "lhcb/TestRPM1_2.3.4"]:
+            dirpath = os.path.join(self.siteroot, path)
+            self.assertTrue(os.path.exists(dirpath))
+            contentpath = os.path.join(dirpath, "content.txt")
+            self.assertTrue(os.path.exists(contentpath))
+            ctf = open(contentpath, "r")
+            ct = ctf.read()
+            ctf.close()
+            self.assertTrue(ct.startswith("TestRPM1_2.3.4_1"))
+        client = LbInstallClient(["--root=%s" % self.siteroot, "-d",  "rpm", "-qa"])
+        rc =  client.main()
+        self.assertEquals(rc, 0)
+        # Running another command which should have upgraded the package
+        for path in [ "lhcb/TestRPM1_2.3.4"]:
+            dirpath = os.path.join(self.siteroot, path)
+            self.assertTrue(os.path.exists(dirpath))
+            contentpath = os.path.join(dirpath, "content.txt")
+            self.assertTrue(os.path.exists(contentpath))
+            ctf = open(contentpath, "r")
+            ct = ctf.read()
+            ctf.close()
+            self.assertTrue(ct.startswith("TestRPM1_2.3.4_2"))
 
     def testConfigInstallProjectInstall(self):
         args = ["--root=%s" % self.siteroot, "--repo=%s" % self.repourl, "Brunel", "v43r1p1"]
