@@ -53,7 +53,7 @@ class VersionedObject(object):
         self.flags = flags
         self.standardVersion = VersionedObject.getStandardVersion(version)
 
-    # version comparison methods
+    # version comparison methods used for dynamic lookup
     ###############################################################################
     def eq(self, x): # IGNORE:C0103
         """ Custom operator """
@@ -79,26 +79,43 @@ class VersionedObject(object):
         if version == None:
             return None
 
+        # Old algo which leads to issues:
         # If the version is of the form: x.y.z
         # return an array with version numbers,
         # e.g. [ 1, 23, 45 ]
         # None otherwise.
         # If it is defined it should be used for comparing versions,
         # otherwise the version strings will be compared
-        standardVersion = None
-        if re.match('\d+(\.\d+)*$', version):
-            standardVersion =  [ int(n) for n in version.split(".") ]
+        #if re.match('\d+(\.\d+)*$', version):
+        #    standardVersion =  [ int(n) for n in version.split(".") ]
+
+        # We just split with the points and do numerical comparison when we can...
+        standardVersion =  [ n for n in version.split(".") ]
         return standardVersion
 
     @classmethod
     def cmpStandardVersion(cls, v1, v2):
         """ Common method for comparing standard versions as arrays of numbers """
+        # zip actually shotens to the length of the shorter list
+        # This is ok in our case
         zippedVers = zip(v1, v2)
-        cmplist = [  a - b for (a, b) in zippedVers if a - b != 0]
+        cmplist = [  VersionedObject._cmpUtil(a, b) for (a, b) in zippedVers
+                   if VersionedObject._cmpUtil(a, b) != 0]
         if len(cmplist) == 0:
             return 0
         else:
             return cmplist[0]
+
+    @classmethod
+    def _cmpUtil(cls, a, b): #IGNORE:C0103
+        """ Utility function that compares strings
+        in the following manner:
+        - if both string represent numbers, perform an integer comparison
+        - otherwise consider both as strings..."""
+        if a.isdigit() and b.isdigit():
+            return int(a) - int(b)
+        else:
+            return cmp(a, b)
 
     def provideMatches(self, provide):
         """ returns true if the provide passed in parameter matches the requirement """
@@ -111,19 +128,19 @@ class VersionedObject(object):
 
         allmethods = inspect.getmembers(self, predicate=inspect.ismethod)
         foundMethod = None
+        methodname = self.flags.lower()
         for m in allmethods: #IGNORE:C0103
-            if m[0].lower() == self.flags.lower():
+            if m[0].lower() == methodname:
                 foundMethod = m[1]
 
         return(foundMethod(provide))
 
     def __cmp__(self, other):
         """ Comparison method for dependencies """
-        #log.debug("Comparing %s with %s" % (self, other))
-
         if other == None:
             return -1
 
+        # ordering by name if they are different
         if self.name != other.name:
             return cmp(self.name, other.name)
         else:
@@ -165,7 +182,7 @@ class VersionedObject(object):
 ###############################################################################
 class Provides(VersionedObject):
     """ Class representing a functionality provided by a package """
-    def __init__(self, name, version, release, epoch=None, flags=None, package=None):
+    def __init__(self, name, version, release, epoch=None, flags="EQ", package=None):
         super( Provides, self ).__init__(name, version, release, epoch, flags)
         # Provides can actually know which package they provide for
         # This is useful for looking for packages in the repository

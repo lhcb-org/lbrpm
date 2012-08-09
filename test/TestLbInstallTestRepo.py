@@ -46,9 +46,9 @@ class Test(unittest.TestCase):
         client = LbInstallClient(args)
         rc =  client.main()
         self.assertEquals(rc, 0)
-
         sys.stdout = old_stdout
         result = mystdout.getvalue().splitlines()
+        print result
         self.assertEquals(result[0], "castor_2.1.9_9_x86_64_slc5_gcc43_opt-1.0.0-1")
         self.assertEquals(result[1], "Total Matching: 1")
 
@@ -60,34 +60,42 @@ class Test(unittest.TestCase):
         for path in [ "lcg/external/castor/2.1.9-9/x86_64-slc5-gcc43-opt"]:
             self.assertTrue(os.path.exists(os.path.join(self.siteroot, path)))
 
+
+    def _checkTestRPM1Release(self, release):
+        path = "lhcb/TestRPM1_2.3.4"
+        dirpath = os.path.join(self.siteroot, path)
+        self.assertTrue(os.path.exists(dirpath))
+        contentpath = os.path.join(dirpath, "content.txt")
+        self.assertTrue(os.path.exists(contentpath))
+        ctf = open(contentpath, "r")
+        ct = ctf.read()
+        ctf.close()
+        self.assertTrue(ct.startswith("TestRPM1_2.3.4_%s" % release))
+
+
     def testConfigInstallOldReleaseAndUpgrade(self):
+
+        # First installing the old release
         args = ["--root=%s" % self.siteroot, "--repo=%s" % self.repourl, "-d",  "install", "TestRPM1", "2.3.4", "1"]
         client = LbInstallClient(args)
         rc =  client.main()
         self.assertEquals(rc, 0)
         # package should be installed, checking that the file is correct
-        for path in [ "lhcb/TestRPM1_2.3.4"]:
-            dirpath = os.path.join(self.siteroot, path)
-            self.assertTrue(os.path.exists(dirpath))
-            contentpath = os.path.join(dirpath, "content.txt")
-            self.assertTrue(os.path.exists(contentpath))
-            ctf = open(contentpath, "r")
-            ct = ctf.read()
-            ctf.close()
-            self.assertTrue(ct.startswith("TestRPM1_2.3.4_1"))
+        self._checkTestRPM1Release("1")
+
+        # Now listing the local packages, but disabling the local update
+        client = LbInstallClient(["--root=%s" % self.siteroot, "--noautoupdate", "-d",  "rpm", "-qa"])
+        rc =  client.main()
+        self.assertEquals(rc, 0)
+        # package should be installed, checking that the file is correct
+        self._checkTestRPM1Release("1")
+
+        # Now listing the local packages, but enabling the local update
         client = LbInstallClient(["--root=%s" % self.siteroot, "-d",  "rpm", "-qa"])
         rc =  client.main()
         self.assertEquals(rc, 0)
-        # Running another command which should have upgraded the package
-        for path in [ "lhcb/TestRPM1_2.3.4"]:
-            dirpath = os.path.join(self.siteroot, path)
-            self.assertTrue(os.path.exists(dirpath))
-            contentpath = os.path.join(dirpath, "content.txt")
-            self.assertTrue(os.path.exists(contentpath))
-            ctf = open(contentpath, "r")
-            ct = ctf.read()
-            ctf.close()
-            self.assertTrue(ct.startswith("TestRPM1_2.3.4_2"))
+        # package should be installed, checking that the file is correct
+        self._checkTestRPM1Release("2")
 
     def testConfigInstallProjectInstall(self):
         args = ["--root=%s" % self.siteroot, "--repo=%s" % self.repourl, "Brunel", "v43r1p1"]
@@ -99,5 +107,5 @@ class Test(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    #import sys;sys.argv = ['', 'Test.testOptions']
+    import sys;sys.argv = ['', 'Test.testConfigInstallOldReleaseAndUpgrade']
     unittest.main()

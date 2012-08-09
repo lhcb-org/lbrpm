@@ -45,7 +45,9 @@ class LbInstallConfig(object): #IGNORE:R0903
         # Debug mode defaults to false
         self.debug = False
         # No-update mode isn't default
-        self.noupdate = False
+        self.noautoupdate = False
+        # Use install by default
+        self.rpmupdate = False
         # Version of the scripts
         self.script_version = "080812"
         # Default log width
@@ -366,7 +368,7 @@ class InstallArea(object): # IGNORE:R0902
         """ Install some rpm files given the location of the RPM DB """
         fulllist = [ os.path.join(rpmloc, f) for f in files ]
         args = [ "-ivh --oldpackage " ]
-        if update:
+        if update or self.config.rpmupdate:
             args = [ "-Uvh" ]
         if forceInstall:
             args.append("--force ")
@@ -425,7 +427,7 @@ class InstallArea(object): # IGNORE:R0902
             req = Requires(newest.name, newest.version, None, None, "EQ", None)
             update = self.lbYumClient.findLatestMatchingRequire(req)
             if update != None and update > newest:
-                if self.config.noupdate:
+                if self.config.noautoupdate:
                     self.log.warning("%s.%s-%s could be updated to %s but update disabled"
                                      % (name, version, release, update.rpmName()))
                 else:
@@ -556,7 +558,7 @@ class MainClient(object):
         self.runMethod = None
         self.runArgs = None
 
-        parser = LbInstallOptionParser()
+        parser = LbInstallOptionParser(usage=usage(sys.argv[0]))
         parser.add_option('-d', '--debug',
                             dest="debug",
                             default=False,
@@ -577,11 +579,16 @@ class MainClient(object):
                             default=False,
                             action="store",
                             help="Only print the command that will be run")
-        parser.add_option('--noupdate',
-                            dest="noupdate",
+        parser.add_option('--noautoupdate',
+                            dest="noautoupdate",
                             default=False,
                             action="store_true",
                             help="Disable automatic updating of packages")
+        parser.add_option('--rpmupdate',
+                            dest="rpmupdate",
+                            default=False,
+                            action="store_true",
+                            help="Install with rpm -U instead of -i")
 
         self.parser = parser
 
@@ -600,7 +607,9 @@ class MainClient(object):
             if opts.repourl != None:
                 self.config.repourl = opts.repourl
 
-            self.config.noupdate = opts.noupdate
+            # Checking the update options
+            self.config.noautoupdate = opts.noautoupdate
+            self.config.rpmupdate = opts.rpmupdate
 
             # Now setting the logging depending on debug mode...
             if self.config.debug:
@@ -631,7 +640,6 @@ class MainClient(object):
 
         except LbInstallException, lie:
             print >> sys.stderr, "ERROR: " + str(lie)
-            usage(sys.argv[0])
             rc = 1
         except:
             print >> sys.stderr, "Exception in lb-install:"
@@ -714,12 +722,12 @@ class InstallProjectClient(MainClient):
                         dest="binary",
                         default=None,
                         action="store",
-                        help="Download binary package as well as source")
+                        help="Download binary package as well as source (install_project mdoe only)")
         self.parser.add_option('-b',
                         dest="useCMTCONFIG",
                         default=False,
                         action="store_true",
-                        help="Download binary package matching environment CMTCONFIG")
+                        help="Download binary package matching environment CMTCONFIG  (install_project mdoe only)")
 
     def prepareRun(self, opts, args):
         """ Main method for the command """
@@ -773,22 +781,26 @@ def selectClient(args):
 def usage(cmd) :
     """ Prints out how to use the script... """
     cmd = os.path.basename(cmd)
-    print """\n%(cmd)s -  install a project in the MYSITEROOT directory'
+    return """\n%(cmd)s -  installs software in MYSITEROOT directory'
 
-Th environment variable MYSITEROOT MUST be set for this script to work.
-It can be used in the following way:
+The environment variable MYSITEROOT MUST be set for this script to work.
+
+It can be used in the following ways:
 
 %(cmd)s [-d][-b] <project> <version>
-This installs a LHCb project, with the binaries if -b is specified.
+install_software compatibility mode: This installs the LHCb project/Package chosen,
+with the binaries if -b is specified.
 
-%(cmd)s install <rpmname>
+%(cmd)s install <rpmname> [<version> [<release>]]
 Installs a RPM from the yum repository
+--rpmupdate can be chose to perform an update instead of a straight install.
 
-%(cmd)s rpm <rpm options>
-Pass through mode where the command is delegated to RPM (with the correct DB)
+%(cmd)s list [<rpmname regexp>]
+List packages available in the repositories configured with a name
+the regular expression passed.
 
-%(cmd)s yum <yum options>
-Pass through mode where the command is delegated to YUM (with the correct DB)
+%(cmd)s rpm <rpm options>...
+Pass through mode where the command is delegated to RPM (with the correct DB).
 
 """ % { "cmd" : cmd }
 

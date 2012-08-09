@@ -40,11 +40,12 @@ class TestComparison(unittest.TestCase):
 
     def testProvidesComparisonAlpha(self):
         name = "TestPackage"
-        p1 = Provides(name, "1.0.1.B", "2")
-        p2 = Provides(name, "1.0.1.A", "1")
+        p1 = Provides(name, "1.0.9.B", "2")
+        p2 = Provides(name, "1.0.9.A", "1")
         p3 = Provides(name, "1.0.0", "1")
+        p4 = Provides(name, "1.0.10.A", "1")
 
-        allvers = [p1, p2, p3]
+        allvers = [p1, p2, p3, p4]
         sortedvers = sorted(allvers)
         print sortedvers
         self.assertEqual(sortedvers[0], p3)
