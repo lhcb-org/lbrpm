@@ -326,7 +326,10 @@ class InstallArea(object): # IGNORE:R0902
         from DependencyManager import Requires
         req = Requires(pnameVerConfig, None, None, None, "GE", None)
         pack = self.lbYumClient.findLatestMatchingRequire(req)
-        return [ pack ]
+        res = []
+        if pack != None:
+            res.append(pack)
+        return res
 
     def _filterUrlsAlreadyInstalled(self, packages):
         """ Filter out RPMs already installed """
