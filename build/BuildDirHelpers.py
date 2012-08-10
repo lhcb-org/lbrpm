@@ -50,6 +50,27 @@ def parseBuildDirName(builddir):
 
     return (prefix, project, version)
 
+# parse the params from the package structure:
+# $LHCBRELEASES/PARAM/ParamFiles/v8r7
+# $LHCBRELEASES/DBASE/Det/SQLDDDB/v7r6
+
+def parsePackageBuildDirName(builddir):
+    """ Split the build directory to extract project name """
+    # First making sure we have a normalized path
+    rpath = os.path.realpath(builddir)
+
+    # Getting the 2 levels above
+    (tmp, version) = os.path.split(rpath)
+    (tmp, package) = os.path.split(tmp)
+    hat = None
+    (prefix, project) = os.path.split(tmp)
+    if project not in ['DBASE', 'PARAM']:
+        hat = project
+        (prefix, project) = os.path.split(prefix)
+
+
+    return (prefix, project, hat, package, version)
+
 
 def listBuiltConfigs(builddir):
     """ List all CMTCONFIGS built in the release area """
@@ -94,7 +115,7 @@ def findCMTRequiredProjects(builddir):
     allprojects = []
     f = open(projectcmtname, "r")
     for l in f.readlines():
-        m = re.match("\s*use\s+([\w_]+)\s+([\w_\£]+)\s*", l)
+        m = re.match("\s*use\s+([\w_]+)\s+([\w_\*]+)\s*", l)
         if m!= None:
             allprojects.append((m.group(1), m.group(2)))
     return allprojects

@@ -26,6 +26,7 @@ BuildArch: %{packarch}
 AutoReqProv: no
 Prefix: /opt/lhcb
 Provides: /bin/sh
+Provides: %{project}%{cmtconfig_rpm} = %{lhcb_maj_version}.%{lhcb_min_version}.%{lhcb_patch_version}
 Requires: %{project}_%{lbversion}
 %{allreqs}
 

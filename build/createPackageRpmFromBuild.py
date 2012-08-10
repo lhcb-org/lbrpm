@@ -53,73 +53,49 @@ if  len(args) < 1:
     print >> sys.stderr, "Missing arguments!"
     usage()
 
-# Setting the release directory
+# Getting the release dir
 releasedir = args[0]
+(prefix, tmpproject, hat, package, version) = BuildDirHelpers.parsePackageBuildDirName(releasedir)
 
-(prefix, tmpproject, pversion) = BuildDirHelpers.parseBuildDirName(releasedir)
-version = pversion.replace(tmpproject + "_", "")
-
-log.info("Processing <%s> <%s>" % (tmpproject, version))
+log.info("Processing <%s><%s><%s><%s>" % (tmpproject, hat, package, version))
 
 project = tmpproject.upper()
 orig_project = tmpproject
-useVersion = options.useVersion
+orig_package = package
 
-# Forcing for LbScripts
-if project.upper() == "LBSCRIPTS":
-    useVersion = True
+versiondir = os.path.join(project, orig_package)
+if hat != None:
+    orig_package = package
+    package = hat + "_" + orig_package
+    versiondir = os.path.join(project, hat, orig_package)
 
 buildarea = options.buildarea
 release = options.release
 RpmHelpers.checkBuildAra(buildarea)
 log.info("Using build area: %s" % buildarea)
 
-
-
 # Setting version
 ################################################################################
-maj_version = 1
-min_version = 0
-patch_version = 0
-
 (lhcb_maj_version, lhcb_min_version, lhcb_patch_version) = RpmHelpers.parseVersion(version)
+(maj_version, min_version, patch_version) = RpmHelpers.parseVersion(version)
 
+cmd = "rpmbuild -v"
+cmd += addDefine("releasedir", releasedir)
+cmd += addDefine("build_area", buildarea)
+cmd += addDefine("project", project)
+cmd += addDefine("hat", hat)
+cmd += addDefine("package", package)
+cmd += addDefine("alias1", package.upper().replace("_", "/"))
+cmd += addDefine("alias2", orig_package.upper())
+cmd += addDefine("lbversion", version)
+cmd += addDefine("maj_version", maj_version)
+cmd += addDefine("min_version", min_version)
+cmd += addDefine("patch_version", patch_version)
+cmd += addDefine("release", release)
+cmd += addDefine("versiondir", versiondir)
+cmd += " -bb " + os.path.join(local_directory, "LHCb_BuiltDataPackage.spectemplate")
 
-if useVersion:
-    (maj_version, min_version, patch_version) = RpmHelpers.parseVersion(version)
-
-allconfigs = BuildDirHelpers.listBuiltConfigs(releasedir)
-log.info("Found following CMTCONFIGS built: %s" % ",".join(allconfigs))
-allconfigs = ["x86_64-slc5-gcc43-opt"]
-
-for cmtconfig in allconfigs:
-
-    cmd = "rpmbuild -v"
-    cmd += addDefine("releasedir", releasedir)
-    cmd += addDefine("build_area", buildarea)
-    cmd += addDefine("project", project)
-    cmd += addDefine("orig_project", orig_project)
-    cmd += addDefine("lbversion", version)
-    cmd += addDefine("release", release)
-    cmd += addDefine("orig_config", cmtconfig)
-    if cmtconfig != '':
-        cmd += addDefine("config", "_" + cmtconfig)
-    else:
-        cmd += addDefine("config",  cmtconfig)
-    cmd += addDefine("maj_version", maj_version)
-    cmd += addDefine("min_version", min_version)
-    cmd += addDefine("patch_version", patch_version)
-    cmd += addDefine("lhcb_maj_version", lhcb_maj_version)
-    cmd += addDefine("lhcb_min_version", lhcb_min_version)
-    cmd += addDefine("lhcb_patch_version", lhcb_patch_version)
-
-    cmd += addDefine("packarch", "noarch")
-
-    cmd += " -bb " + os.path.join(local_directory, "LHCb_BuiltProject.spectemplate")
-
-    log.info("Running: %s" % cmd)
-    rc = subprocess.call(cmd, shell=True)
-    #sys.exit(rc)
-
+log.info("Running: %s" % cmd)
+rc = subprocess.call(cmd, shell=True)
 
 

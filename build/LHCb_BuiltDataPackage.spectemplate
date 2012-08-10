@@ -1,0 +1,67 @@
+
+
+%global __os_install_post /usr/lib/rpm/check-buildroot
+%define _topdir %{build_area}/rpmbuild
+%define tmpdir %{build_area}/tmpbuild
+%define _tmppath %{build_area}/tmp
+
+Name: %{project}_%{package}
+Version: %{maj_version}.%{min_version}.%{patch_version}
+Release: %{release}
+Vendor: LHCb
+Summary: %{project}_%{package}
+License: GPL
+Group: LHCb
+Source0: %{url}
+BuildRoot: %{tmpdir}/%{name}-buildroot
+BuildArch: noarch
+AutoReqProv: no
+Prefix: /opt/lhcb
+Provides: /bin/sh
+Provides: %{alias1} = %{maj_version}.%{min_version}.%{patch_version}
+Provides: %{alias1}_%{lbversion} = 1.0.0
+Provides: %{alias2} = %{maj_version}.%{min_version}.%{patch_version}
+Provides: %{alias2}_%{lbversion} = 1.0.0
+Requires(post): LBSCRIPTS
+
+%description
+%{project}
+
+%prep
+echo "Building <%{project}_%{package}>"
+echo %__os_install_post
+exit
+%build
+
+%install
+
+[ -d ${RPM_BUILD_ROOT} ] && rm -rf ${RPM_BUILD_ROOT}
+
+/bin/mkdir -p ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/%{versiondir}
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+cd ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/
+cp -r %{releasedir} ${RPM_BUILD_ROOT}/opt/lhcb/lhcb/%{versiondir}
+if [ $? -ne 0 ]; then
+  exit $?
+fi
+
+%post
+
+%postun
+
+%clean
+
+%files
+%defattr(-,root,root)
+/opt/lhcb/lhcb/%{versiondir}/
+
+%define date    %(echo `LC_ALL="C" date +"%a %b %d %Y"`)
+
+%changelog
+
+* %{date} User <ben.couturier..rcern.ch>
+- first Version
+

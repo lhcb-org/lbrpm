@@ -324,7 +324,7 @@ class InstallArea(object): # IGNORE:R0902
             pnameVerConfig = pnameVer
 
         from DependencyManager import Requires
-        req = Requires(pnameVerConfig, None, None, None, "GT", None)
+        req = Requires(pnameVerConfig, None, None, None, "GE", None)
         pack = self.lbYumClient.findLatestMatchingRequire(req)
         return [ pack ]
 
@@ -507,9 +507,9 @@ exactarch=1
 obsoletes=1
 plugins=1
 gpgcheck=0
-installroot={siteroot}
+installroot=%(siteroot)s
 reposdir=/etc/yum.repos.d
-    """.format(siteroot=siteroot)
+    """ % { 'siteroot':siteroot }
         return cfile
 
     @classmethod
@@ -518,10 +518,10 @@ reposdir=/etc/yum.repos.d
         cfile = """
 [{name}]
 #REPOVERSION 0001
-name={name}
-baseurl={url}
+name=%(name)s
+baseurl=%(url)s
 enabled=1
-""".format( url=url, name=name )
+""" % { 'url' : url, 'name': name }
         return cfile
 
 # Class for known install exceptions
@@ -531,7 +531,8 @@ class LbInstallException(Exception):
 
     def __init__(self, msg):
         """ Constructor for the exception """
-        super(LbInstallException, self).__init__(msg)
+        #super(LbInstallException, self).__init__(msg)
+        Exception.__init__(self, msg)
 
 # Classes and method for command line parsing
 ###############################################################################
@@ -612,7 +613,8 @@ class MainClient(object):
             self.config.rpmupdate = opts.rpmupdate
 
             # Now setting the logging depending on debug mode...
-            if self.config.debug:
+            if opts.debug:
+                self.config.debug = True
                 logging.basicConfig(format="%(levelname)-8s: %(funcName)-25s - %(message)s")
                 logging.getLogger().setLevel(logging.DEBUG)
 

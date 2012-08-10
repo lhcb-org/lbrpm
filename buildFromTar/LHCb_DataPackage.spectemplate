@@ -10,7 +10,7 @@
 %define _tmppath %{build_area}/tmp
 
 Name: %{project}_%{package}
-Version:%{maj_version}.%{min_version}.%{patch_version}
+Version: %{maj_version}.%{min_version}.%{patch_version}
 Release: %{release}
 Vendor: LHCb
 Summary: %{project}

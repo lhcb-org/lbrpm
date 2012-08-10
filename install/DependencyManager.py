@@ -852,10 +852,13 @@ class RepositorySQLiteBackend(object):
              from packages p, provides r
              where p.pkgkey = r.pkgkey
              and r.name = ?
-             and r.version = ?
-             and r.release = ? """
+             and r.version = ? """
 
-        res = cursor.execute(sq, [ provide.name, provide.version, provide.release])
+        if provide.release != None:
+            sq += " and r.release = ? "
+            res = cursor.execute(sq, [ provide.name, provide.version, provide.release])
+        else:
+            res = cursor.execute(sq, [ provide.name, provide.version])
 
         # Getting the results
         for (pkgkey, pname, version, release, epoch, rpm_group, arch, location_href) in res:

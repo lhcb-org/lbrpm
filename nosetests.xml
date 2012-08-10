@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?><testsuite name="nosetests" tests="43" errors="0" failures="1" skip="0"><testcase classname="test.TestComparison.TestComparison" name="testDifferentName" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testGreater" time="0.001" /><testcase classname="test.TestComparison.TestComparison" name="testLower" time="0.001" /><testcase classname="test.TestComparison.TestComparison" name="testMatchEqual" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testOrderDifferentName" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testProvidesComparison" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testProvidesComparisonAlpha" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testProvidesComparisonNoRelease" time="0.000" /><testcase classname="test.TestComparison.TestComparison" name="testRequireWithNoVersion" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testArgParsing" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testInstallProjectClientBadBin" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testInstallProjectClientBin" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testInstallProjectClientCmdlineBin" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testInstallProjectClientFullLine" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testInstallProjectClientNobin" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testLbInstallClientBadCmd" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testLbInstallClientInstallRpm" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testLbInstallClientList" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testLbInstallClientRpm" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testOptsBinary" time="0.001" /><testcase classname="test.TestLbInstall.Test" name="testOptsBinaryShort" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testSelectClient1" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testSelectClient2" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testSelectClient3" time="0.000" /><testcase classname="test.TestLbInstall.Test" name="testSelectClient4" time="0.000" /><testcase classname="test.TestLbInstallTestRepo.Test" name="testConfigCreation" time="2.908" /><testcase classname="test.TestLbInstallTestRepo.Test" name="testConfigInstallOldReleaseAndUpgrade" time="3.103" /><testcase classname="test.TestLbInstallTestRepo.Test" name="testConfigInstallProjectInstall" time="2.726"><failure type="exceptions.AssertionError" message="1 != 0
+-------------------- &gt;&gt; begin captured logging &lt;&lt; --------------------
+root: INFO: ========================================================================================================================
+root: INFO:                   &lt;&lt;&lt; Thu, 09 Aug 2012 17:34:28 - Start of lb-install.py 080812 with python 2.6.5 &gt;&gt;&gt;                   
+root: INFO: ========================================================================================================================
+lb_install: INFO: Proceeding to the installation of Brunel/v43r1p1/None
+lb_install: INFO: Repository is: file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo
+lb_install: INFO: RPM DB in /tmp/lben/tmpkPycxn/var/lib/rpm
+lb_install: INFO: Creating directory /tmp/lben/tmpkPycxn/var/lib/rpm for RPM db
+lb_install: INFO: Initializing RPM db
+root: INFO: Initializing repository: lcg / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lcg
+root: INFO: NET - Getting remote metadata for lcg
+root: INFO: Checking availability of interface: RepositorySQLiteBackend
+root: WARNING: Remote repository does not provide RepositorySQLiteBackend DB
+root: INFO: Checking availability of interface: RepositoryXMLBackend
+root: INFO: Updating the RPM database for RepositoryXMLBackend
+root: INFO: NET - Downloading latest version of XML DB
+root: INFO: Repository lcg - Chosen backend: RepositoryXMLBackend
+root: INFO: Initializing repository: lhcb / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb
+root: INFO: NET - Getting remote metadata for lhcb
+root: INFO: Checking availability of interface: RepositorySQLiteBackend
+root: INFO: Updating the RPM database for RepositorySQLiteBackend
+root: INFO: Repository lhcb - Chosen backend: RepositorySQLiteBackend
+root: INFO: Initializing repository: lhcbold / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/rpm
+root: INFO: NET - Getting remote metadata for lhcbold
+root: ERROR: ERROR - Banning repository lhcbold: &lt;urlopen error [Errno 2] No such file or directory: '/afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/rpm/repodata/repomd.xml'&gt;
+lb_install: INFO: rpm: Found /bin/rpm
+lb_install: INFO: Installing LBSCRIPTS-7.1.0-0 and dependencies
+root: INFO: Checking dependencies for LBSCRIPTS.7.1.0-0
+lb_install: INFO: Found 3 RPMs to install
+lb_install: INFO: Checking for installation of: COMPAT-1.10.0-0
+lb_install: INFO: Checking for installation of: CMT-v1r20p20090520-0
+lb_install: INFO: Checking for installation of: LBSCRIPTS-7.1.0-0
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/COMPAT-1.10.0-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/COMPAT-1.10.0-0.rpm
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/CMT-v1r20p20090520-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/CMT-v1r20p20090520-0.rpm
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/LBSCRIPTS-7.1.0-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/LBSCRIPTS-7.1.0-0.rpm
+lb_install: INFO: RPM command:
+lb_install: INFO: rpm --dbpath /tmp/lben/tmpkPycxn/var/lib/rpm  --prefix /tmp/lben/tmpkPycxn -ivh --oldpackage  /tmp/lben/tmpkPycxn/tmp/COMPAT-1.10.0-0.rpm /tmp/lben/tmpkPycxn/tmp/CMT-v1r20p20090520-0.rpm /tmp/lben/tmpkPycxn/tmp/LBSCRIPTS-7.1.0-0.rpm
+lb_install: INFO: Installing Brunel/v43r1p1/None
+lb_install: INFO: Found 1 matches
+lb_install: INFO: Found RPM: BRUNEL_v43r1p1-1.0.0-1
+lb_install: INFO: Installing BRUNEL_v43r1p1-1.0.0-1 and dependencies
+root: INFO: Checking dependencies for BRUNEL_v43r1p1.1.0.0-1
+lb_install: INFO: Found 1 RPMs to install
+lb_install: INFO: Checking for installation of: BRUNEL_v43r1p1-1.0.0-1
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/BRUNEL_v43r1p1-1.0.0-1.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/BRUNEL_v43r1p1-1.0.0-1.rpm
+lb_install: INFO: RPM command:
+lb_install: INFO: rpm --dbpath /tmp/lben/tmpkPycxn/var/lib/rpm  --prefix /tmp/lben/tmpkPycxn -ivh --oldpackage  /tmp/lben/tmpkPycxn/tmp/BRUNEL_v43r1p1-1.0.0-1.rpm
+--------------------- &gt;&gt; end captured logging &lt;&lt; ---------------------"><![CDATA[Traceback (most recent call last):
+  File "/afs/cern.ch/sw/lcg/external/Python/2.6.5p2/x86_64-slc5-gcc43-opt/lib/python2.6/unittest.py", line 279, in run
+    testMethod()
+  File "/afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/TestLbInstallTestRepo.py", line 104, in testConfigInstallProjectInstall
+    self.assertEquals(rc, 0)
+  File "/afs/cern.ch/sw/lcg/external/Python/2.6.5p2/x86_64-slc5-gcc43-opt/lib/python2.6/unittest.py", line 350, in failUnlessEqual
+    (msg or '%r != %r' % (first, second))
+AssertionError: 1 != 0
+-------------------- >> begin captured logging << --------------------
+root: INFO: ========================================================================================================================
+root: INFO:                   <<< Thu, 09 Aug 2012 17:34:28 - Start of lb-install.py 080812 with python 2.6.5 >>>                   
+root: INFO: ========================================================================================================================
+lb_install: INFO: Proceeding to the installation of Brunel/v43r1p1/None
+lb_install: INFO: Repository is: file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo
+lb_install: INFO: RPM DB in /tmp/lben/tmpkPycxn/var/lib/rpm
+lb_install: INFO: Creating directory /tmp/lben/tmpkPycxn/var/lib/rpm for RPM db
+lb_install: INFO: Initializing RPM db
+root: INFO: Initializing repository: lcg / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lcg
+root: INFO: NET - Getting remote metadata for lcg
+root: INFO: Checking availability of interface: RepositorySQLiteBackend
+root: WARNING: Remote repository does not provide RepositorySQLiteBackend DB
+root: INFO: Checking availability of interface: RepositoryXMLBackend
+root: INFO: Updating the RPM database for RepositoryXMLBackend
+root: INFO: NET - Downloading latest version of XML DB
+root: INFO: Repository lcg - Chosen backend: RepositoryXMLBackend
+root: INFO: Initializing repository: lhcb / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb
+root: INFO: NET - Getting remote metadata for lhcb
+root: INFO: Checking availability of interface: RepositorySQLiteBackend
+root: INFO: Updating the RPM database for RepositorySQLiteBackend
+root: INFO: Repository lhcb - Chosen backend: RepositorySQLiteBackend
+root: INFO: Initializing repository: lhcbold / file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/rpm
+root: INFO: NET - Getting remote metadata for lhcbold
+root: ERROR: ERROR - Banning repository lhcbold: <urlopen error [Errno 2] No such file or directory: '/afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/rpm/repodata/repomd.xml'>
+lb_install: INFO: rpm: Found /bin/rpm
+lb_install: INFO: Installing LBSCRIPTS-7.1.0-0 and dependencies
+root: INFO: Checking dependencies for LBSCRIPTS.7.1.0-0
+lb_install: INFO: Found 3 RPMs to install
+lb_install: INFO: Checking for installation of: COMPAT-1.10.0-0
+lb_install: INFO: Checking for installation of: CMT-v1r20p20090520-0
+lb_install: INFO: Checking for installation of: LBSCRIPTS-7.1.0-0
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/COMPAT-1.10.0-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/COMPAT-1.10.0-0.rpm
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/CMT-v1r20p20090520-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/CMT-v1r20p20090520-0.rpm
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/LBSCRIPTS-7.1.0-0.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/LBSCRIPTS-7.1.0-0.rpm
+lb_install: INFO: RPM command:
+lb_install: INFO: rpm --dbpath /tmp/lben/tmpkPycxn/var/lib/rpm  --prefix /tmp/lben/tmpkPycxn -ivh --oldpackage  /tmp/lben/tmpkPycxn/tmp/COMPAT-1.10.0-0.rpm /tmp/lben/tmpkPycxn/tmp/CMT-v1r20p20090520-0.rpm /tmp/lben/tmpkPycxn/tmp/LBSCRIPTS-7.1.0-0.rpm
+lb_install: INFO: Installing Brunel/v43r1p1/None
+lb_install: INFO: Found 1 matches
+lb_install: INFO: Found RPM: BRUNEL_v43r1p1-1.0.0-1
+lb_install: INFO: Installing BRUNEL_v43r1p1-1.0.0-1 and dependencies
+root: INFO: Checking dependencies for BRUNEL_v43r1p1.1.0.0-1
+lb_install: INFO: Found 1 RPMs to install
+lb_install: INFO: Checking for installation of: BRUNEL_v43r1p1-1.0.0-1
+lb_install: INFO: Downloading file:///afs/cern.ch/user/l/lben/cmtuser/lbrpm/test/testyumrepo/lhcb/BRUNEL_v43r1p1-1.0.0-1.noarch.rpm to /tmp/lben/tmpkPycxn/tmp/BRUNEL_v43r1p1-1.0.0-1.rpm
+lb_install: INFO: RPM command:
+lb_install: INFO: rpm --dbpath /tmp/lben/tmpkPycxn/var/lib/rpm  --prefix /tmp/lben/tmpkPycxn -ivh --oldpackage  /tmp/lben/tmpkPycxn/tmp/BRUNEL_v43r1p1-1.0.0-1.rpm
+--------------------- >> end captured logging << ---------------------
+]]></failure></testcase><testcase classname="test.TestLbInstallTestRepo.Test" name="testConfigInstallrpm" time="6.262" /><testcase classname="test.TestLbInstallTestRepo.Test" name="testConfigListPackage" time="2.024" /><testcase classname="test.TestRepository.TestRepository" name="testCyclicDependency" time="0.046" /><testcase classname="test.TestRepository.TestRepository" name="testDependencyEqual" time="0.017" /><testcase classname="test.TestRepository.TestRepository" name="testDependencyGreater" time="0.018" /><testcase classname="test.TestRepository.TestRepository" name="testFindReleaseUpdate" time="0.019" /><testcase classname="test.TestRepository.TestRepository" name="testPackageByNameWithRelease" time="0.016" /><testcase classname="test.TestRepository.TestRepository" name="testPackageByNameWithoutRelease" time="0.018" /><testcase classname="test.TestRepository.TestRepository" name="testPackageByNameWithoutVersion" time="0.017" /><testcase classname="test.TestRepository.TestRepository" name="testPackageMatching" time="0.016" /><testcase classname="test.TestRepositoryConf.TestRepository" name="testLoadConfigLocal" time="0.554" /><testcase classname="test.TestRepositoryConf.TestRepository" name="testLoadConfigLocalXML" time="1.001" /><testcase classname="test.TestRepositoryConf.TestRepository" name="testLoadConfigRemote" time="0.290" /><testcase classname="test.testBuildDirHelper.Test" name="testDotsinDir" time="0.011" /><testcase classname="test.testBuildDirHelper.Test" name="testSimple" time="0.000" /></testsuite>
