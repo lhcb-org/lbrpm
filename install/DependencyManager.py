@@ -714,10 +714,10 @@ class RepositorySQLiteBackend(object):
             self._decompressDB()
 
         # Import the the package and open DB connection
-        try:
-            import sqlite3 as sql #@UnusedImport
-        except: #IGNORE:W0702
-            import sqlite as sql #@UnresolvedImport @Reimport #IGNORE:F0401
+        #try:
+        import sqlite3 as sql #@UnresolvedImport @Reimport #IGNORE:F0401 #@UnusedImport
+        #except: #IGNORE:W0702
+        #    import sqlite as sql #@UnresolvedImport @Reimport #IGNORE:F0401
 
         self.mDBConnection = sql.connect(self.mPrimaryUncompressed)
 
