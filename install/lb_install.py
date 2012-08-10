@@ -516,7 +516,7 @@ reposdir=/etc/yum.repos.d
     def _getYumRepo(cls, name, url):
         """ Builds the Yum repository configuration from template """
         cfile = """
-[{name}]
+[%(name)s]
 #REPOVERSION 0001
 name=%(name)s
 baseurl=%(url)s
