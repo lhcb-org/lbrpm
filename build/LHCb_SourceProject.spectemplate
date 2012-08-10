@@ -20,7 +20,7 @@ BuildArch: noarch
 AutoReqProv: no
 Prefix: /opt/lhcb
 Provides: /bin/sh
-Provides: %{project}-%{lhcb_maj_version}.%{lhcb_min_version}.%{lhcb_patch_version}
+Provides: %{project} = %{lhcb_maj_version}.%{lhcb_min_version}.%{lhcb_patch_version}
 
 %description
 %{project}
