@@ -24,7 +24,7 @@ class TestRepository(unittest.TestCase):
 
     def checkClient(self, lbYumClient):
         self.assertEqual(len(lbYumClient.repositories.keys()), 3)
-        self.assertEqual(len([ p for p in  lbYumClient.listPackages("BRUNEL")]), 9)
+        self.assertEqual(len([ p for p in  lbYumClient.listPackages("BRUNEL")]), 7)
         p = lbYumClient.findLatestMatchingName("ROOT_5.32.02_x86_64_slc5_gcc46_opt")
         self.assertEquals(p.version, "1.0.0")
         self.assertEquals(p.release, "1")
