@@ -1,0 +1,10 @@
+{
+'description': {
+'version': 'preview',
+'platform': 'x86_64-slc6-gcc48-opt'
+},
+'packages': {
+'tcmalloc' : {'version': '1.7p3', 'hash': '750c8','dest_name':'tcmalloc' ,'dependencies' : [ ]},
+'ROOT' : {'version': '5.34.05', 'hash': 'd2736','dest_name':'ROOT' ,'dependencies' : [ 'tcmalloc']},
+'LCGCMT' : {'version': 'LCGCMT_preview', 'hash': '8b48a','dest_name':'LCGCMT' ,'dependencies' : [ ]},
+} }
