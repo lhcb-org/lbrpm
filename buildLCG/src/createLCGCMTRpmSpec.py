@@ -6,6 +6,7 @@ It printouts a spec file, which can be redirected to a file.
 To produce the rpm themselves:
 rpm -bb <specfile>
 
+
 """
 import json
 import os
