@@ -5,6 +5,7 @@ Created on Aug 6, 2012
 '''
 import os
 import unittest
+import shutil
 from lb_install import InstallProjectClient, LbInstallClient
 
 
@@ -20,7 +21,8 @@ class Test(unittest.TestCase):
         self.repourl = "file://%s" % filename
 
     def tearDown(self):
-        pass
+        if self.siteroot != None:
+	    shutil.rmtree(self.siteroot) 
 
     def testConfigCreation(self):
         args = ["--root=%s" % self.siteroot, "--repo=%s" % self.repourl, "list"]
