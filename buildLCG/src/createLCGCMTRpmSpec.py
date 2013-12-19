@@ -20,23 +20,28 @@ log.setLevel(logging.DEBUG)
 
 CONTAINER_LIST = [ "pytools", "pygraphics", "pyanalysis"]
 LCGNAME = "LCG"
-IGNORE_PKG = [ "yoda", "herwig++" ]
+IGNORE_PKG = [ "yoda", "herwig++", "lhapdf6", "sherpa", "soqt", "pygsi",
+               "CORAL", "rivet", "COOL", "crmc", "professor", "RELAX", "rivet2", "qwt",
+               "agile", "hepmcanalysis", "minuit", "mctester", "hydjet++", "ROOT", "LCGCMT" ]
 
 # Class representing a RPM
 ###############################################################################
 class Rpm(object):
     """ Base class representing a RPM used to generate all the data related """
-    def __init__(self, lcgcmt_version, name, version, config, dirname, hat = None):
+    def __init__(self, lcgcmt_version, name, version, config, dirname, namehash, hat = None):
         self.lcgcmt_version = lcgcmt_version
         self.name = name
         self.version = version
         self.config = config
         self.hat = hat
         self.dirname = dirname
+        self.namehash = namehash
         self.deps = list()
         self.dict = None
-
-    def getRPMName(self):
+        self.getRPMName = self.getHashRPMName
+        self.isMetaRPM = False
+        
+    def getLCGRPMName(self):
         pre = self.name
         if self.hat != None:
             pre = self.hat + "_" + self.name
@@ -44,11 +49,27 @@ class Rpm(object):
         post = (self.version + "_" + self.config).replace("-", "_")
         return LCGNAME + "-" + self.lcgcmt_version + "_" + pre + "_" + post
 
+    def getHashRPMName(self):
+        pre = self.namehash
+        if self.hat != None:
+            pre = self.hat + "_" + self.namehash
+        post = (self.version + "_" + self.config).replace("-", "_")
+        return pre + "_" + post
+
     def getRPMVersion(self):
         return "1.0.0"
 
-    def getDiskPath(self):
+    def getSourcePath(self):
+        ''' Location in the LCG Install area '''
         return os.path.join(LCGNAME +"-" + self.lcgcmt_version, self.dirname , self.version, self.config)
+
+    def getTargetPath(self):
+        ''' Location to which is should go iafter install '''
+        return os.path.join(self.dirname, self.namehash, self.config)
+
+    def getTargetLCGCMTPath(self):
+        ''' Location to which is should go iafter install '''
+        return os.path.join(LCGNAME +"-" + self.lcgcmt_version, self.dirname, self.version)
 
     def __str__(self):
         strg = "RPM: %s-%s\n" % (self.getRPMName(), self.getRPMVersion())
@@ -83,6 +104,64 @@ AutoReqProv: no
                 raise Exception("%s %s Looking up dependency %s but not in dictionary" % (self.getRPMName(), self.getRPMVersion(), d))
             rpm_packages += "Requires: %s\n" % drpm.getRPMName()
         return rpm_packages
+
+
+class LCGCMTRpm(object):
+    """ Base class representing a RPM used to generate all the data related """
+    def __init__(self, lcgcmt_version, config):
+        self.lcgcmt_version = lcgcmt_version
+        self.name = "LCG"
+        self.config = config
+        self.deps = list()
+        self.dict = None
+        self.isMetaRPM = True
+        
+    def getRPMName(self):
+        pre = self.name + "LINK"
+        post = (self.lcgcmt_version + "_" + self.config).replace("-", "_")
+        return pre + "_" + post
+
+    def getRPMVersion(self):
+        return "1.0.0"
+
+    def getTargetPath(self):
+        ''' Location to which is should go iafter install '''
+        return self.name + '-' + self.lcgcmt_version
+
+    def __str__(self):
+        strg = "RPM: %s-%s\n" % (self.getRPMName(), self.getRPMVersion())
+        return strg
+
+    def prepareRPMDescription(self):
+        """ Prepare the description of this package to be
+        inserted in the global SPEC file """
+        rpm_desc = """
+%%description -n  %s
+%s %s
+""" % (self.getRPMName(), self.getRPMName(), self.getRPMVersion())
+        return rpm_desc
+
+    def prepareRPMPackage(self):
+        """ Prepare the package entry of this package to be
+        inserted in the global SPEC file """
+        rpm_packages = Template("""
+%package -n $n
+Version:$v
+Group:LCG
+Summary: LCGCMT $n $v
+AutoReqProv: no
+""").substitute(n=self.getRPMName(), v=self.getRPMVersion(), )
+        for d in self.dependencies:
+            # First checking the data
+            if dict == None:
+                raise Exception("%s %s Looking up dependency %s but no dictionary available" % (self.getRPMName(), self.getRPMVersion(), d))
+            # Looking up the rpm itself
+            drpm = self.dict[d]
+            if drpm == None:
+                raise Exception("%s %s Looking up dependency %s but not in dictionary" % (self.getRPMName(), self.getRPMVersion(), d))
+            rpm_packages += "Requires: %s\n" % drpm.getRPMName()
+        return rpm_packages
+
 
 # Directory configuration
 ###############################################################################
@@ -192,11 +271,18 @@ def prepareRPMDict(data, lcgcmt_version, platform):
             #log.debug("Ignoring package " + name + " " + version + " in " + dirname)
             deptype = "SUBDEP"
         log.debug("Adding package " + name + " " + version + " type:" + deptype)
-        r = Rpm(lcgcmt_version, name, version , platform, dirname)
+        r = Rpm(lcgcmt_version, name, version , platform, dirname, d['namehash'])
         r.dependencies = list(d["dependencies"])
         r.dict = rpmDict
         rpmDict[k] = r
     log.debug("All packages added")
+
+    # Adding meta package with links
+    deps = packagesMap.keys()
+    r = LCGCMTRpm(lcgcmt_version, platform) 
+    r.dependencies = deps
+    r.dict = rpmDict
+    rpmDict['LCGCMTLINK'] = r
     return rpmDict
 
 # Class to build the SPEC itself
@@ -212,6 +298,7 @@ class RpmSpec(object):
         self.data = fixLCGCMTData(tmpdata)
         self.rpmDict = prepareRPMDict(self.data, self.lcgcmt_version,
                                       self.lcgcmt_cmtconfig)
+        
         self.rpmList = self.rpmDict.values()
 
         #topdir = "/scratch/z5/rpmbuild"
@@ -258,6 +345,7 @@ class RpmSpec(object):
 %define tmpdir $tmpdir
 %define _tmppath $rpmtmp
 %define debug_package %{nil}
+%global __os_install_post /usr/lib/rpm/check-buildroot
 
 Name: %{project}_%{rpmversion}
 Version: 1.0.0
@@ -331,10 +419,24 @@ fi
 cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
 """
         for r in self.rpmList:
-            path = r.getDiskPath()
-            rpm_common += "mkdir -p ${RPM_BUILD_ROOT}/%s/%s\n" % (self.getLCGPath(),  path)
-            rpm_common += "rsync -ar %%{LCGCMTROOT}/%s/* ${RPM_BUILD_ROOT}%s/%s\n" % (path, self.getLCGPath(), path)
+            if r.isMetaRPM:
+                continue
+            rpm_common += "mkdir -p ${RPM_BUILD_ROOT}%s/%s\n" % (self.getLCGPath(),  r.getTargetPath())
+            rpm_common += "rsync -ar %%{LCGCMTROOT}/%s/* ${RPM_BUILD_ROOT}%s/%s\n" % (r.getSourcePath(), self.getLCGPath(), r.getTargetPath())
+            if not os.path.exists(os.path.join("/afs/cern.ch/sw/lcg/experimental/", r.getSourcePath() )):
+                log.debug("MISSING: " + r.name)
 
+        rpm_common += "\n# Building the LCGCMT directory with links\n"         
+        for r in self.rpmList:
+            if r.isMetaRPM:
+                continue
+            linkpath = "${RPM_BUILD_ROOT}%s/%s" %  (self.getLCGPath(),  r.getTargetLCGCMTPath())
+            rpm_common += "mkdir -p %s\n" % linkpath
+            updircount = 3 + r.dirname.count("/")
+            updir = []
+            for i in range(updircount):
+                updir.append('..')
+            rpm_common += "cd %s &&  ln -s %s/%s\n" % (linkpath, "/".join(updir),  r.getTargetPath())
         rpm_common += """
 
 %post
@@ -356,7 +458,7 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
         for r in self.rpmList:
             rpm_files += "\n%%files -n  %s\n" % (r.getRPMName())
             rpm_files += "%defattr(-,root,root)\n"
-            rpm_files += "%s/%s\n" % (self.getLCGPath(), r.getDiskPath())
+            rpm_files += "%s/%s\n" % (self.getLCGPath(), r.getTargetPath())
         rpm_files += "\n"
         return rpm_files
 
