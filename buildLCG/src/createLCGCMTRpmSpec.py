@@ -358,7 +358,7 @@ Source0: %{url}
 BuildRoot: %{tmpdir}/%{project}-%{lbversion}-%{cmtconfig}-buildroot
 BuildArch: noarch
 AutoReqProv: no
-Prefix: /opt/lhcb
+Prefix: /opt
 Provides: /bin/sh
 
 """).substitute(rpmver=self.lcgcmt_version, rpmconfig=self.lcgcmt_cmtconfig, \
