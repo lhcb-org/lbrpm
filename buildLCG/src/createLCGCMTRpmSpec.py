@@ -18,29 +18,36 @@ from string import Template
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
 
-CONTAINER_LIST = [ "pytools", "pygraphics", "pyanalysis"]
+#CONTAINER_LIST = [ "pytools", "pygraphics", "pyanalysis"]
+#LCGNAME = "LCG"
+#IGNORE_PKG = [ "yoda", "herwig++", "lhapdf6", "sherpa", "soqt", "pygsi",
+#               "CORAL", "rivet", "COOL", "crmc", "professor", "RELAX", "rivet2", "qwt",
+#               "agile", "hepmcanalysis", "minuit", "mctester", "hydjet++", "ROOT", "LCGCMT" ]
+
+CONTAINER_LIST = [  ]
 LCGNAME = "LCG"
-IGNORE_PKG = [ "yoda", "herwig++", "lhapdf6", "sherpa", "soqt", "pygsi",
-               "CORAL", "rivet", "COOL", "crmc", "professor", "RELAX", "rivet2", "qwt",
-               "agile", "hepmcanalysis", "minuit", "mctester", "hydjet++", "ROOT", "LCGCMT" ]
+IGNORE_PKG = [ "numpy", "setuptools", "lhapdfsets", "sip" ]
+
 
 # Class representing a RPM
 ###############################################################################
 class Rpm(object):
     """ Base class representing a RPM used to generate all the data related """
-    def __init__(self, lcgcmt_version, name, version, config, dirname, namehash, hat = None):
+    def __init__(self, lcgcmt_version, name, version, config, dirname, hash, hat = None):
         self.lcgcmt_version = lcgcmt_version
         self.name = name
         self.version = version
         self.config = config
         self.hat = hat
         self.dirname = dirname
-        self.namehash = namehash
+        self.hash = hash
+        self.namehash = name + "-" + hash
         self.deps = list()
         self.dict = None
         self.getRPMName = self.getHashRPMName
         self.isMetaRPM = False
-        
+        self.namewithhat = os.path.join(*self.dirname.split(os.sep)[:-2])
+            
     def getLCGRPMName(self):
         pre = self.name
         if self.hat != None:
@@ -61,15 +68,16 @@ class Rpm(object):
 
     def getSourcePath(self):
         ''' Location in the LCG Install area '''
-        return os.path.join(LCGNAME +"-" + self.lcgcmt_version, self.dirname , self.version, self.config)
+        #return os.path.join(LCGNAME +"_" + self.lcgcmt_version, self.dirname , self.version, self.config)
+        return os.path.join(LCGNAME +"_" + self.lcgcmt_version, self.dirname)
 
     def getTargetPath(self):
-        ''' Location to which is should go iafter install '''
-        return os.path.join(self.dirname, self.namehash, self.config)
+        ''' Location to which is should go after install '''
+        return os.path.join(self.namewithhat, self.version + "-" + self.hash, self.config)
 
     def getTargetLCGCMTPath(self):
         ''' Location to which is should go iafter install '''
-        return os.path.join(LCGNAME +"-" + self.lcgcmt_version, self.dirname, self.version)
+        return os.path.join(LCGNAME +"_" + self.lcgcmt_version, self.namewithhat, self.version)
 
     def __str__(self):
         strg = "RPM: %s-%s\n" % (self.getRPMName(), self.getRPMVersion())
@@ -99,6 +107,7 @@ AutoReqProv: no
             if dict == None:
                 raise Exception("%s %s Looking up dependency %s but no dictionary available" % (self.getRPMName(), self.getRPMVersion(), d))
             # Looking up the rpm itself
+            log.debug("====================> Preparing RPM: " + d)
             drpm = self.dict[d]
             if drpm == None:
                 raise Exception("%s %s Looking up dependency %s but not in dictionary" % (self.getRPMName(), self.getRPMVersion(), d))
@@ -125,8 +134,8 @@ class LCGCMTRpm(object):
         return "1.0.0"
 
     def getTargetPath(self):
-        ''' Location to which is should go iafter install '''
-        return self.name + '-' + self.lcgcmt_version
+        ''' Location to which is should go after install '''
+        return self.name + '_' + self.lcgcmt_version
 
     def __str__(self):
         strg = "RPM: %s-%s\n" % (self.getRPMName(), self.getRPMVersion())
@@ -184,7 +193,12 @@ def loadLCGCMTJSON(filename):
             continue
         # Parse proper line
         # name-hash; package name; version; hash; full directory name; comma separated dependencies
-        (namehash, name, version, hash, dirname, deps) = line.split(";")
+        (name, hash, version, dirname, deps) = line.split(";")
+        name = name.strip()
+        hash = hash.strip()
+        version = version.strip()
+        dirname = dirname.strip()
+        namehash = name + "-" + hash
         #log.debug((namehash, name, version, hash, dirname, deps))
         pdata = {}
         pdata['name'] = name
@@ -192,8 +206,8 @@ def loadLCGCMTJSON(filename):
         pdata['hash'] = hash
         pdata['version'] = version
         pdata['dirname'] = dirname
-        pdata['dependencies'] = [ e for e in deps.strip().split(",") if e != "" ]
-        packages[namehash] = pdata
+        pdata['dependencies'] = [ e.strip() for e in deps.strip().split(",") if e != "" ]
+        packages[name] = pdata
         log.debug(pdata)
         
     data = {}
@@ -217,7 +231,6 @@ def fixLCGCMTData(data):
     #     print "%s   -> %d" % (k, usecount[k])
     # containers = [ k for k in usecount.keys() if usecount[k] > 1 ]
     # print containers
-
     newpackages = dict()
     for pack in packages.values():
         name = pack["name"]
@@ -236,9 +249,6 @@ def fixLCGCMTData(data):
         newdeps = []
         for d in deps:
             log.debug("Identifying dependency: %s" % d)
-            dpack = packages[d]
-            if dpack['dirname'] in CONTAINER_LIST:
-                continue
             if len([ip for ip in IGNORE_PKG if d.startswith(ip)]) > 0:
                 continue
             newdeps.append(d)
@@ -246,7 +256,7 @@ def fixLCGCMTData(data):
         # Copying and fixing deps
         newpack = copy.deepcopy(pack)
         newpack['dependencies'] = newdeps
-        newpackages[newpack['namehash']] = newpack
+        newpackages[newpack['name']] = newpack
 
     newdata = dict()
     newdata['packages'] = newpackages
@@ -271,7 +281,7 @@ def prepareRPMDict(data, lcgcmt_version, platform):
             #log.debug("Ignoring package " + name + " " + version + " in " + dirname)
             deptype = "SUBDEP"
         log.debug("Adding package " + name + " " + version + " type:" + deptype)
-        r = Rpm(lcgcmt_version, name, version , platform, dirname, d['namehash'])
+        r = Rpm(lcgcmt_version, name, version , platform, dirname, d['hash'])
         r.dependencies = list(d["dependencies"])
         r.dict = rpmDict
         rpmDict[k] = r
@@ -290,10 +300,11 @@ def prepareRPMDict(data, lcgcmt_version, platform):
 
 class RpmSpec(object):
 
-    def __init__(self, version, platform, filename):
+    def __init__(self, version, platform, filename, lcg_prefix, rpmroot):
         """ Initialize with the list of RPMs """
         self.lcgcmt_version = version
         self.lcgcmt_cmtconfig = platform
+        self.lcg_prefix = lcg_prefix
         tmpdata = loadLCGCMTJSON(filename)
         self.data = fixLCGCMTData(tmpdata)
         self.rpmDict = prepareRPMDict(self.data, self.lcgcmt_version,
@@ -304,8 +315,9 @@ class RpmSpec(object):
         #topdir = "/scratch/z5/rpmbuild"
         #tmpdir = "/scratch/z5/tmpbuild"
         #rpmtmp = "/scratch/z5/tmp"
+        #myroot = "/home/opt/build"
 
-        myroot = "/home/opt/build"
+        myroot =  rpmroot
         self.topdir = "%s/rpmbuild" % myroot
         self.tmpdir = "%s/tmpbuild" % myroot
         self.rpmtmp = "%s/tmp" % myroot
@@ -336,7 +348,7 @@ class RpmSpec(object):
 %define project LCGCMT
 %define lbversion $rpmver
 %define cmtconfig $rpmconfig
-%define LCGCMTROOT /afs/cern.ch/sw/lcg/experimental/
+%define LCGCMTROOT $lcg_prefix
 
 %define cmtconfig_rpm %( echo %{cmtconfig} | tr '-' '_' )
 %define rpmversion %{lbversion}_%{cmtconfig_rpm}
@@ -362,7 +374,8 @@ Prefix: /opt
 Provides: /bin/sh
 
 """).substitute(rpmver=self.lcgcmt_version, rpmconfig=self.lcgcmt_cmtconfig, \
-                topdir=self.topdir, tmpdir=self.tmpdir, rpmtmp=self.rpmtmp)
+                topdir=self.topdir, tmpdir=self.tmpdir, rpmtmp=self.rpmtmp,
+                lcg_prefix=self.lcg_prefix)
         return rpm_header
 
 # RPM requiremenst for the whole package
@@ -423,8 +436,8 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
                 continue
             rpm_common += "mkdir -p ${RPM_BUILD_ROOT}%s/%s\n" % (self.getLCGPath(),  r.getTargetPath())
             rpm_common += "rsync -ar %%{LCGCMTROOT}/%s/* ${RPM_BUILD_ROOT}%s/%s\n" % (r.getSourcePath(), self.getLCGPath(), r.getTargetPath())
-            if not os.path.exists(os.path.join("/afs/cern.ch/sw/lcg/experimental/", r.getSourcePath() )):
-                log.debug("MISSING: " + r.name)
+            if not os.path.exists(os.path.join("/afs/.cern.ch/sw/lcg/experimental/", r.getSourcePath() )):
+                log.debug("MISSING: " + os.path.join("/afs/.cern.ch/sw/lcg/experimental/", r.getSourcePath() ))
 
         rpm_common += "\n# Building the LCGCMT directory with links\n"         
         for r in self.rpmList:
@@ -432,7 +445,7 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
                 continue
             linkpath = "${RPM_BUILD_ROOT}%s/%s" %  (self.getLCGPath(),  r.getTargetLCGCMTPath())
             rpm_common += "mkdir -p %s\n" % linkpath
-            updircount = 3 + r.dirname.count("/")
+            updircount = 3 + r.namewithhat.count("/")
             updir = []
             for i in range(updircount):
                 updir.append('..')
@@ -496,10 +509,19 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
 
 if __name__ == '__main__':
     logging.basicConfig(stream=sys.stderr)
+
+    if len(sys.argv) != 6:
+        print "Please specify: %s <lcgversion> <platform> <lcgconfigfilename> <lcgdir> <rpm build root>" % sys.argv[0]
+        print "e.g. %s 67 x86_64-slc6-gcc48-opt myconfig.txt /afs/.cern.ch/sw/lcg/experimental /home/opt/build"  % sys.argv[0]
+        sys.exit(1)
+        
     version = sys.argv[1]
     platform = sys.argv[2]
     input_filename = sys.argv[3]
+    lcg_prefix = sys.argv[4]
+    rpmroot = sys.argv[5]
+    
     log.debug("processing %s" % input_filename)
-    spec = RpmSpec(version, platform, input_filename)
+    spec = RpmSpec(version, platform, input_filename, lcg_prefix, rpmroot)
     print spec.getSpec()
 
