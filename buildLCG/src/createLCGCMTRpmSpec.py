@@ -11,12 +11,13 @@ rpm -bb <specfile>
 import copy
 import logging
 import os
+import optparse
 import re
 import sys
 from string import Template
 
 log = logging.getLogger()
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 
 #CONTAINER_LIST = [ "pytools", "pygraphics", "pyanalysis"]
 #LCGNAME = "LCG"
@@ -56,8 +57,7 @@ class Rpm(object):
 
         post = (self.version + "_" + self.config).replace("-", "_")
         return LCGNAME + "_" + self.lcgcmt_version + "_" + pre + "_" + post
-
-            
+    
     def getHashRPMName(self):
         """ Get the name of the RPM including the unique hash"""
         pre = self.namehash
@@ -69,10 +69,14 @@ class Rpm(object):
     def getRPMVersion(self):
         return "1.0.0"
 
-    def getSourcePath(self):
+    def getSourcePathWithLCG(self):
         ''' Location in the LCG Install area '''
         #return os.path.join(LCGNAME +"_" + self.lcgcmt_version, self.dirname , self.version, self.config)
         return os.path.join(LCGNAME +"_" + self.lcgcmt_version, self.dirname)
+
+    def getSourcePath(self):
+        ''' Location in the LCG Install area '''
+        return self.dirname
 
     def getTargetPath(self):
         ''' Location to which is should go after install '''
@@ -253,7 +257,7 @@ AutoReqProv: no
 
 # Directory configuration
 ###############################################################################
-def loadLCGCMTJSON(filename):
+def loadLCGMetaData(filename):
     """ Load the JSON file and check the basic structure """
     # First loading the JSON
     with open(filename) as inputfile:
@@ -261,6 +265,9 @@ def loadLCGCMTJSON(filename):
 
     packages = {}
     for line in inputdata:
+        if re.match("^\s*PLATFORM:", line) or re.match("^\s*VERSION:", line):
+            continue
+        
         # Parse the file
         # Ignore commments
         if re.match("^\s*#", line):
@@ -294,10 +301,34 @@ def loadLCGCMTJSON(filename):
 
     return  data
 
+# Reading LCGCMT version and platform from file
+###############################################################################
+def loadLCGCMTVersionPlatform(filename):
+    """ Load the JSON file and check the basic structure """
+    # First loading the JSON
+    with open(filename) as inputfile:
+        inputdata = inputfile.readlines()
+
+    platform = None
+    version = None
+    for line in inputdata:
+        m = re.match("^\s*PLATFORM:\s*([a-zA-Z0-9_\-]*)", line)
+        if m != None:
+            platform = m.group(1)
+
+        m = re.match("^\s*VERSION:\s*([a-zA-Z0-9_\-]*)", line)
+        if m != None:
+            version = m.group(1)
+
+        if version != None and platform != None:
+            break
+    log.debug("Platform: %s, Version: %s" % (platform, version))
+    return (platform, version)
+
 # Remove container and clean dependencies
 ###############################################################################
 def fixLCGCMTData(data):
-    """ Convert the file to something usebale by LCGCMT users """
+    """ Convert the file to something useable by LCGCMT users """
 
     packages = data["packages"]
 
@@ -386,18 +417,36 @@ def prepareRPMDict(data, lcgcmt_version, platform):
 #############################################################
 class RpmSpec(object):
     """ Class presenting the whole LCG spec """
-    def __init__(self, version, platform, filename, lcg_prefix, rpmroot):
+    def __init__(self, version, platform, filename, lcg_dir, rpmroot, packageType, mainLCGFilename):
         """ Initialize with the list of RPMs """
         self.lcgcmt_version = version
         self.lcgcmt_cmtconfig = platform
-        self.lcg_prefix = lcg_prefix
-        tmpdata = loadLCGCMTJSON(filename)
+        self.lcg_prefix = lcg_dir
+        # Externals or generators
+        self.packageType = packageType
+        # Same info as boolean, easier to deal with later on...
+        self.isMainLCG = (packageType == "externals")
+
+        # Now loading the stuff
+        tmpdata = loadLCGMetaData(filename)
+        self.rpmToBuild = tmpdata["packages"].keys()
+        if not self.isMainLCG:
+            # Then load it too
+            log.info("Load Main LCG file: %s",  mainLCGFilename)
+            lcgdata = loadLCGMetaData(mainLCGFilename)
+            lcgpack = lcgdata["packages"]
+
+            # Merging the two metadata fiels to check the dependencies
+            for p in lcgpack.values():
+                tmpdata["packages"][p["name"]] = p
+            
         self.data = fixLCGCMTData(tmpdata)
         self.rpmDict = prepareRPMDict(self.data, self.lcgcmt_version,
                                       self.lcgcmt_cmtconfig)
-        
-        self.rpmList = self.rpmDict.values()
 
+        # Limit the list to the original list
+        self.rpmList = [ v for v in self.rpmDict.values() if v.name in self.rpmToBuild]
+        
         #topdir = "/scratch/z5/rpmbuild"
         #tmpdir = "/scratch/z5/tmpbuild"
         #rpmtmp = "/scratch/z5/tmp"
@@ -431,8 +480,13 @@ class RpmSpec(object):
 
     def getHeader(self):
         """ Build the SPEC Header """
+        # Ugly, should do this better
+        projectName = "LGC"
+        if type == "generators":
+            projectName = "LCG_generators"
+            
         rpm_header = Template("""
-%define project LCG
+%define project $projectName
 %define lbversion $rpmver
 %define cmtconfig $rpmconfig
 %define LCGCMTROOT $lcg_prefix
@@ -462,7 +516,7 @@ Provides: /bin/sh
 
 """).substitute(rpmver=self.lcgcmt_version, rpmconfig=self.lcgcmt_cmtconfig, \
                 topdir=self.topdir, tmpdir=self.tmpdir, rpmtmp=self.rpmtmp,
-                lcg_prefix=self.lcg_prefix)
+                lcg_prefix=self.lcg_prefix, projectName=projectName)
         return rpm_header
 
 # RPM requiremenst for the whole package
@@ -523,7 +577,7 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
                 continue
             rpm_common += r.getInstallCommands(self.getLCGPath())
             if not os.path.exists(os.path.join(self.lcg_prefix, r.getSourcePath() )):
-                log.debug("MISSING: " + os.path.join(sel.lcg_prefix, r.getSourcePath() ))
+                log.debug("MISSING: " + os.path.join(self.lcg_prefix, r.getSourcePath() ))
 
         # rpm_common += "\n# Building the LCGCMT directory with links\n"         
         # for r in self.rpmList:
@@ -590,23 +644,173 @@ cd ${RPM_BUILD_ROOT}/opt/lhcb/lcg
 
         return rpm_global
 
+
+# Main method
+#############################################################
+def getLCGParamsFromFileName(filename):
+    """ Parse the filename to extract LCG information"""
+    log.debug("Processing file %s" % filename)
+    lcg_dir = os.path.realpath(os.path.dirname(filename))
+    filename =  os.path.basename(filename)
+    log.debug("LCG dir: %s" % lcg_dir)
+    log.debug("Filename: %s" % filename)
+
+    import re
+    type = None
+    cmtconfig = None
+    m = re.match("^LCG_([a-zA-Z0-9]+)_(.*).txt$", filename)
+    if m != None:
+        type = m.group(1)
+        cmtconfig = m.group(2)
+        log.debug("Type: %s" % type)
+        log.debug("platform: %s" % cmtconfig)
+
+    # Trying to derive version from parent filename
+    parentdirname =  os.path.basename(lcg_dir)
+    version = None
+    m2 = re.match("^LCG_(.*)$", parentdirname)
+    if m2 != None:
+        version = m2.group(1)
+        log.debug("version: %s" % version)
+
+    return (lcg_dir, filename, type, cmtconfig, version)
+
+
+# Get Main LCG file name
+#############################################################
+def getMainLCGFileName(filename, version, platform):
+    """ For generators, find main LCG file name,
+    called LCG_externals_<platform>.txt"""
+    lcg_dir = os.path.realpath(os.path.dirname(filename))
+    return os.path.join(lcg_dir, "LCG_externals_%s.txt" % platform)
+
+
+# Main method
+#############################################################
+def usage(cmd):
+    """ Prints out how to use the script... """
+    cmd = os.path.basename(cmd)
+    return """\n%(cmd)s [options] LCG_description_filename
+
+    Prepare the SPEC file for a LCG release
+
+    """ % { "cmd" : cmd }
+
 # Main method
 #############################################################
 if __name__ == '__main__':
+    # Setting logging 
     logging.basicConfig(stream=sys.stderr)
 
-    if len(sys.argv) != 6:
-        print "Please specify: %s <lcgversion> <platform> <lcgconfigfilename> <lcgdir> <rpm build root>" % sys.argv[0]
-        print "e.g. %s 67 x86_64-slc6-gcc48-opt myconfig.txt /afs/.cern.ch/sw/lcg/experimental /home/opt/build"  % sys.argv[0]
-        sys.exit(1)
+    # Parsing options
+    parser = optparse.OptionParser(sys.argv[0])
+    parser.add_option('-d', '--debug',
+                      dest="debug",
+                      default=False,
+                      action="store_true",
+                      help="Show debug information")
+    parser.add_option('-v', '--version',
+                      dest="version",
+                      default=None,
+                      action="store",
+                      help="Force LCG version")
+    parser.add_option('-p', '--platform',
+                      dest="platform",
+                      default=None,
+                      action="store",
+                      help="Force platform")
+    parser.add_option('-l', '--lcgdir',
+                      dest="lcgdir",
+                      default=None,
+                      action="store",
+                      help="Force LCG dir if different from the one containing the config file")
+    parser.add_option('-b', '--buildroot',
+                      dest="buildroot",
+                      default="/tmp",
+                      action="store",
+                      help="Force build root")
+    parser.add_option('-g', '--generators',
+                      dest="generators",
+                      default=False,
+                      action="store_true",
+                      help="Build generators instead of LCG")
+    parser.add_option('-o', '--output',
+                      dest="output",
+                      default = None,
+                      action="store",
+                      help="File name for the generated specfile [default output to stdout]")
+    parser.add_option('-m', '--mainLCGFile',
+                      dest="mainLCGFile",
+                      default=None,
+                      action="store",
+                      help="Specify the main LCG file, when building the generators")
+
+    opts, args = parser.parse_args(sys.argv)
+
+    if len(args) != 2:
+        parser.error("Please specify at least the file name")
+
+    if opts.debug:
+        log.setLevel(logging.DEBUG)
         
-    version = sys.argv[1]
-    platform = sys.argv[2]
-    input_filename = sys.argv[3]
-    lcg_prefix = sys.argv[4]
-    rpmroot = sys.argv[5]
+    input_filename = args[1]
+    if not os.path.exists(input_filename):
+        print "File: %s does NOT exist" % input_filename
+        sys.exit(1)
+
+    # Parsing info from filename
+    (fileLCGDir, filename, filenameType, filenamePlatform, filenameVersion) = getLCGParamsFromFileName(input_filename)
+    (filePlatform, fileVersion) = loadLCGCMTVersionPlatform(input_filename)
+
+    # The build root (default /tmp)
+    rpmroot = opts.buildroot
+
+    # Now selecting the parameters, either from options or from the parameters passed
+    # Options override what was derived from the file name
+    lcg_dir = fileLCGDir
+    if opts.lcgdir != None:
+        lcg_dir = opts.lcgdir
+
+    types = ["externals", "generators" ]
+    type = "externals"
+    if filenameType != None and filenameType in types:
+        type = filenameType
+    if opts.generators:
+        type = "generators"
+
+    platform = filenamePlatform
+    if filePlatform != None:
+        platform = filePlatform
+    if opts.platform != None:
+        platform = opts.platform
+
+    version = filenameVersion
+    if fileVersion != None:
+        version = fileVersion
+    if opts.version != None:
+        version = opts.version
+
+    log.info("Processing %s" % input_filename)
+    log.info("LCG Version: %s" % version)
+    log.info("Platform: %s" % platform)
+    log.info("Package type: %s" % type)
+    log.info("LCG dir: %s" % lcg_dir)
+    log.info("Build root: %s" % rpmroot)
+
+    # Check if we build the externals or generators
+    mainLCGFileName = None
+    if type != "externals":
+        if opts.mainLCGFile:
+            mainLCGFileName = opts.mainLCGFile
+        else:
+            mainLCGFileName = getMainLCGFileName(input_filename, version, platform)
+        
     
-    log.debug("processing %s" % input_filename)
-    spec = RpmSpec(version, platform, input_filename, lcg_prefix, rpmroot)
-    print spec.getSpec()
+    spec = RpmSpec(version, platform, input_filename, lcg_dir, rpmroot, type, mainLCGFileName)
+
+    if opts.output:
+        with open(opts.output, "w") as outputfile:
+            outputfile.write(spec.getSpec())
+    else:
+        print spec.getSpec()
 
